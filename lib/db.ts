@@ -1,8 +1,9 @@
 import { Pool, QueryResult, QueryResultRow } from 'pg';
 
+const isLocalDb = /(?:localhost|127\.0\.0\.1)/.test(process.env.DATABASE_URL || '');
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined,
+  ssl: isLocalDb ? undefined : { rejectUnauthorized: false },
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
