@@ -1,5 +1,6 @@
 import { verifyPaymentOnChain } from './verification';
 import { query } from './db';
+import { sendPayment } from './locus';
 import crypto from 'crypto';
 
 interface PaymentDetails {
@@ -93,6 +94,54 @@ export async function handlePaymentConfirmed(
   await query('UPDATE users SET trust_score = trust_score + 1 WHERE id = $1', [
     listingRow.seller_id,
   ]);
+
+  // 9. Outcome A: release any HELD commitments to the seller and mark APPLIED.
+  // The buyer's final payment was already discounted by these amounts, so the
+  // platform now owes the seller the held funds.
+  if (buyerId) {
+    const held = await query<{
+      id: string;
+      amount_usdc: string;
+      checkout_session_id: string;
+    }>(
+      `SELECT id, amount_usdc, checkout_session_id
+       FROM commitments
+       WHERE listing_id = $1 AND buyer_id = $2 AND status = 'HELD'`,
+      [listingRow.id, buyerId]
+    );
+
+    const sellerWalletResult = await query<{ locus_wallet_address: string }>(
+      `SELECT locus_wallet_address FROM users WHERE id = $1`,
+      [listingRow.seller_id]
+    );
+    const sellerWallet = sellerWalletResult.rows[0]?.locus_wallet_address;
+
+    for (const c of held.rows) {
+      try {
+        // Re-verify the original commitment payment exists on-chain.
+        const commitPaid = await verifyPaymentOnChain(c.checkout_session_id);
+        if (!commitPaid || !sellerWallet) {
+          console.warn(`[RELEASE] Skipping commitment ${c.id}: not verifiable on-chain`);
+          continue;
+        }
+        const { txHash } = await sendPayment({
+          to: sellerWallet,
+          amount: c.amount_usdc,
+          reason: `Commitment APPLIED — listing ${listingRow.id}`,
+        });
+        await query(
+          `UPDATE commitments
+           SET status = 'APPLIED', resolved_at = NOW(),
+               payment_tx_hash = COALESCE(payment_tx_hash, $2)
+           WHERE id = $1`,
+          [c.id, txHash]
+        );
+        console.log(`[RELEASE] Commitment ${c.id} APPLIED → ${txHash}`);
+      } catch (err) {
+        console.error(`[RELEASE] Failed to apply commitment ${c.id}:`, err);
+      }
+    }
+  }
 
   console.log(`[RELEASE] Dual verification passed (${source}). Download token generated.`);
   return { downloadToken, expires };

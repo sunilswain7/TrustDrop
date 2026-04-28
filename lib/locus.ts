@@ -39,6 +39,7 @@ export async function createCheckoutSession(params: {
   webhookUrl: string;
   successUrl?: string;
   metadata?: Record<string, string>;
+  receiptConfig?: { enabled?: boolean; merchantName?: string };
 }): Promise<CreateCheckoutSessionResponse['data']> {
   const body: CreateCheckoutSessionRequest = {
     amount: params.amount,
@@ -46,6 +47,7 @@ export async function createCheckoutSession(params: {
     webhookUrl: params.webhookUrl,
     successUrl: params.successUrl,
     metadata: params.metadata,
+    receiptConfig: params.receiptConfig,
     expiresInMinutes: 30,
   };
 
@@ -77,6 +79,30 @@ export async function agentPreflight(sessionId: string) {
 // Check wallet balance
 export async function getBalance() {
   return locusRequest('/pay/balance');
+}
+
+// Send USDC from the platform wallet to a recipient.
+// Used for commitment fee release/refund.
+export async function sendPayment(params: {
+  to: string;
+  amount: string;
+  reason?: string;
+}): Promise<{ txHash: string }> {
+  const res = await locusRequest('/pay/send', {
+    method: 'POST',
+    body: JSON.stringify({
+      to: params.to,
+      amount: params.amount,
+      reason: params.reason,
+    }),
+  });
+  // Beta API returns { success: true, data: { txHash } } per the existing pattern.
+  // Be defensive about either shape.
+  const txHash = (res?.data?.txHash || res?.txHash) as string | undefined;
+  if (!txHash) {
+    throw new Error('pay/send did not return a txHash');
+  }
+  return { txHash };
 }
 
 // Verify webhook signature (HMAC-SHA256)

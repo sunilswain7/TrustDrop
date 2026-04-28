@@ -1,6 +1,9 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import CommitmentRequest from './CommitmentRequest';
+import ShareLink from './ShareLink';
+import DirectCheckoutLink from './DirectCheckoutLink';
 
 interface Message {
   id: string;
@@ -25,10 +28,30 @@ interface ListingContext {
   checkout_session_id: string | null;
 }
 
+interface Commitment {
+  id: string;
+  buyer_id: string;
+  seller_id: string;
+  amount_usdc: string;
+  status: string;
+  deadline: string;
+  created_at: string;
+  requested_changes: string;
+}
+
 interface ImprovementRoomProps {
   listingId: string;
   currentUserId: string;
   isSeller: boolean;
+}
+
+function formatRemaining(deadlineIso: string): string {
+  const ms = new Date(deadlineIso).getTime() - Date.now();
+  if (ms <= 0) return 'expired';
+  const totalMin = Math.floor(ms / 60000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
 export default function ImprovementRoom({
@@ -38,9 +61,13 @@ export default function ImprovementRoom({
 }: ImprovementRoomProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [listing, setListing] = useState<ListingContext | null>(null);
+  const [commitment, setCommitment] = useState<Commitment | null>(null);
+  const [sellerDelivered, setSellerDelivered] = useState(false);
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [, setNowTick] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Seller update state
@@ -63,6 +90,8 @@ export default function ImprovementRoom({
       const data = await res.json();
       setMessages(data.messages || []);
       setListing(data.listing || null);
+      setCommitment(data.commitment || null);
+      setSellerDelivered(Boolean(data.sellerDeliveredAfterCommit));
     } catch {
       console.error('Failed to fetch messages');
     } finally {
@@ -72,7 +101,15 @@ export default function ImprovementRoom({
 
   useEffect(() => {
     fetchMessages();
-  }, [fetchMessages]);
+    // Trigger deadline check on Room load (Outcome C). Best-effort.
+    fetch(`/api/room/${listingId}/check-deadline`, { method: 'POST' }).catch(() => {});
+  }, [fetchMessages, listingId]);
+
+  // 1-minute tick to refresh the countdown display
+  useEffect(() => {
+    const t = setInterval(() => setNowTick((x) => x + 1), 60000);
+    return () => clearInterval(t);
+  }, []);
 
   // Poll for new messages (fallback when WebSocket not available)
   useEffect(() => {
@@ -182,6 +219,28 @@ export default function ImprovementRoom({
   }
 
   const isArchived = listing?.status === 'SOLD';
+  const heldCommitment = commitment?.status === 'HELD' ? commitment : null;
+  const myHeldCommitment =
+    heldCommitment && !isSeller && heldCommitment.buyer_id === currentUserId
+      ? heldCommitment
+      : null;
+
+  async function handleReject() {
+    if (rejecting) return;
+    setRejecting(true);
+    try {
+      const res = await fetch(`/api/room/${listingId}/reject`, { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        console.error('Reject failed', data);
+      }
+      await fetchMessages();
+    } catch (err) {
+      console.error('Reject network error', err);
+    } finally {
+      setRejecting(false);
+    }
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -206,15 +265,37 @@ export default function ImprovementRoom({
           </div>
         </div>
 
-        {/* Preview thumbnail */}
-        {listing?.preview_url && listing.preview_url !== 'pending' && (
-          <img
-            src={listing.preview_url}
-            alt="Current preview"
-            className="w-16 h-16 rounded-lg object-cover border border-zinc-700"
-          />
-        )}
+        <div className="flex items-center gap-3">
+          {/* Share buttons — only meaningful while listing is active */}
+          {!isArchived && listing && (
+            <div className="hidden sm:flex gap-2">
+              <ShareLink listingId={listingId} />
+              <DirectCheckoutLink sessionId={listing.checkout_session_id} />
+            </div>
+          )}
+
+          {/* Preview thumbnail */}
+          {listing?.preview_url && listing.preview_url !== 'pending' && (
+            <img
+              src={listing.preview_url}
+              alt="Current preview"
+              className="w-16 h-16 rounded-lg object-cover border border-zinc-700"
+            />
+          )}
+        </div>
       </div>
+
+      {/* Commitment banner */}
+      {heldCommitment && (
+        <div className="border-b border-violet-500/30 bg-violet-500/10 px-4 py-2 text-sm text-violet-200 flex items-center justify-between gap-3">
+          <span>
+            {isSeller ? 'Buyer committed' : 'You committed'} ${parseFloat(heldCommitment.amount_usdc).toFixed(2)} —{' '}
+            {sellerDelivered
+              ? 'seller has delivered. Buyer can now Buy or Reject.'
+              : `seller has ${formatRemaining(heldCommitment.deadline)} to deliver.`}
+          </span>
+        </div>
+      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -332,6 +413,41 @@ export default function ImprovementRoom({
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Buyer's post-delivery actions: Buy or Reject */}
+      {myHeldCommitment && sellerDelivered && !isArchived && (
+        <div className="border-t border-zinc-800 p-4 bg-emerald-500/5 flex items-center justify-between gap-3">
+          <span className="text-sm text-emerald-300">
+            Seller delivered. Buy now (commitment is deducted from total) or reject.
+          </span>
+          <div className="flex gap-2 shrink-0">
+            <button
+              onClick={handleReject}
+              disabled={rejecting}
+              className="text-sm border border-zinc-700 hover:border-red-500/50 text-zinc-300 hover:text-red-400 px-3 py-2 rounded-lg transition disabled:opacity-50"
+            >
+              {rejecting ? 'Releasing…' : 'Reject'}
+            </button>
+            <a
+              href={`/listing/${listingId}`}
+              className="text-sm bg-emerald-500 hover:bg-emerald-600 text-white font-medium px-3 py-2 rounded-lg transition"
+            >
+              Buy
+            </a>
+          </div>
+        </div>
+      )}
+
+      {/* Commitment input (buyer only, when no HELD commitment of theirs exists) */}
+      {!isSeller && !isArchived && !myHeldCommitment && listing && (
+        <div className="border-t border-zinc-800 px-4 py-2 flex justify-end">
+          <CommitmentRequest
+            listingId={listingId}
+            currentPrice={listing.price_usdc}
+            onConfirmed={fetchMessages}
+          />
         </div>
       )}
 

@@ -14,7 +14,7 @@ export async function GET() {
   const listingsResult = await query(
     `SELECT l.id, l.title, l.price_usdc, l.category, l.file_type,
             l.preview_url, l.preview_version, l.status,
-            l.checkout_url, l.created_at, l.updated_at,
+            l.checkout_session_id, l.checkout_url, l.created_at, l.updated_at,
             (SELECT COUNT(*) FROM purchases p
               WHERE p.listing_id = l.id AND p.on_chain_verified = true) AS sales_count
      FROM listings l

@@ -55,7 +55,31 @@ export async function GET(
     }
   }
 
-  return NextResponse.json({ listing: result.rows[0], purchase });
+  // For logged-in buyers, include any HELD commitments + price breakdown.
+  let breakdown = null;
+  if (user) {
+    const userId = (user as { id: string }).id;
+    const heldResult = await query<{ id: string; amount_usdc: string; requested_changes: string }>(
+      `SELECT id, amount_usdc, requested_changes
+       FROM commitments
+       WHERE listing_id = $1 AND buyer_id = $2 AND status = 'HELD'`,
+      [id, userId]
+    );
+    const listingRow = result.rows[0] as Record<string, unknown>;
+    const originalPrice = parseFloat(String(listingRow.price_usdc));
+    const totalCommitted = heldResult.rows.reduce((sum, c) => sum + parseFloat(c.amount_usdc), 0);
+    breakdown = {
+      originalPrice: originalPrice.toFixed(2),
+      commitments: heldResult.rows.map((c) => ({
+        amount: parseFloat(c.amount_usdc).toFixed(2),
+        description: c.requested_changes,
+      })),
+      totalCommitted: totalCommitted.toFixed(2),
+      finalAmount: Math.max(0, originalPrice - totalCommitted).toFixed(2),
+    };
+  }
+
+  return NextResponse.json({ listing: result.rows[0], purchase, breakdown });
 }
 
 // PUT /api/listings/:id — update listing (seller only)

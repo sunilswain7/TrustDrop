@@ -5,6 +5,8 @@ import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import LocusCheckoutButton from '@/components/LocusCheckoutButton';
 import TxProof from '@/components/TxProof';
+import ShareLink from '@/components/ShareLink';
+import DirectCheckoutLink from '@/components/DirectCheckoutLink';
 import type { CheckoutSuccessData } from '@withlocus/checkout-react';
 
 interface Listing {
@@ -33,6 +35,13 @@ interface PurchaseInfo {
   detection_source: string | null;
 }
 
+interface PriceBreakdown {
+  originalPrice: string;
+  commitments: { amount: string; description: string }[];
+  totalCommitted: string;
+  finalAmount: string;
+}
+
 export default function ListingPage() {
   const { id } = useParams();
   const searchParams = useSearchParams();
@@ -40,6 +49,7 @@ export default function ListingPage() {
 
   const [listing, setListing] = useState<Listing | null>(null);
   const [purchase, setPurchase] = useState<PurchaseInfo | null>(null);
+  const [breakdown, setBreakdown] = useState<PriceBreakdown | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [txHash, setTxHash] = useState<string | null>(null);
@@ -52,6 +62,7 @@ export default function ListingPage() {
         else {
           setListing(data.listing);
           if (data.purchase) setPurchase(data.purchase);
+          if (data.breakdown) setBreakdown(data.breakdown);
         }
       })
       .catch(() => setError('Failed to load listing'))
@@ -186,12 +197,39 @@ export default function ListingPage() {
             )}
           </div>
 
+          {/* Itemized breakdown when buyer has commitments on this listing */}
+          {breakdown && breakdown.commitments.length > 0 && !purchase && (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 text-sm space-y-2">
+              <p className="text-zinc-400 font-medium">Your itemized total</p>
+              <div className="flex justify-between">
+                <span className="text-zinc-400">{listing.title} (original)</span>
+                <span className="text-zinc-300">${breakdown.originalPrice}</span>
+              </div>
+              {breakdown.commitments.map((c, i) => (
+                <div key={i} className="flex justify-between text-violet-300">
+                  <span className="truncate pr-2" title={c.description}>
+                    Commitment: {c.description.slice(0, 40)}{c.description.length > 40 ? '…' : ''}
+                  </span>
+                  <span>−${c.amount}</span>
+                </div>
+              ))}
+              <div className="border-t border-zinc-800 pt-2 flex justify-between font-semibold">
+                <span className="text-white">Final due now</span>
+                <span className="text-emerald-400">${breakdown.finalAmount}</span>
+              </div>
+              <p className="text-xs text-zinc-600">
+                Locus receipt is configured ({'{'}<code>enabled</code>, <code>merchantName</code>{'}'}). Locus emails its own
+                receipt for the final amount; this panel is the full itemized breakdown.
+              </p>
+            </div>
+          )}
+
           {/* Buy / Download section */}
           {listing.status === 'ACTIVE' && !purchase && (
             <LocusCheckoutButton
               listingId={listing.id}
               sessionId={listing.checkout_session_id}
-              price={listing.price_usdc}
+              price={breakdown?.finalAmount ?? listing.price_usdc}
               onSuccess={handlePaymentSuccess}
             />
           )}
@@ -232,6 +270,14 @@ export default function ListingPage() {
           {listing.status === 'SOLD' && !purchase && (
             <div className="bg-zinc-800 text-center py-4 rounded-lg text-zinc-400">
               This item has been sold
+            </div>
+          )}
+
+          {/* Share / Discord links */}
+          {listing.status === 'ACTIVE' && (
+            <div className="flex flex-wrap gap-2">
+              <ShareLink listingId={listing.id} />
+              <DirectCheckoutLink sessionId={listing.checkout_session_id} />
             </div>
           )}
 

@@ -41,9 +41,47 @@ export async function GET(
     [listingId]
   );
 
+  // Surface the latest HELD commitment + the most recent resolved one for context.
+  // The viewer sees their own HELD commitment as the buyer; the seller sees any
+  // HELD commitment on their listing.
+  const commitmentResult = await query<{
+    id: string;
+    buyer_id: string;
+    seller_id: string;
+    amount_usdc: string;
+    status: string;
+    deadline: string;
+    created_at: string;
+    requested_changes: string;
+  }>(
+    `SELECT id, buyer_id, seller_id, amount_usdc, status, deadline, created_at, requested_changes
+     FROM commitments
+     WHERE listing_id = $1
+     ORDER BY (status = 'HELD') DESC, created_at DESC
+     LIMIT 1`,
+    [listingId]
+  );
+
+  // Has the seller delivered AFTER the latest HELD commitment was created?
+  let sellerDeliveredAfterCommit = false;
+  const heldCommit = commitmentResult.rows.find((r) => r.status === 'HELD');
+  if (heldCommit) {
+    const delivery = await query<{ id: string }>(
+      `SELECT id FROM room_messages
+       WHERE listing_id = $1 AND sender_role = 'seller'
+         AND message_type = 'preview_update'
+         AND created_at > $2
+       LIMIT 1`,
+      [listingId, heldCommit.created_at]
+    );
+    sellerDeliveredAfterCommit = delivery.rows.length > 0;
+  }
+
   return NextResponse.json({
     messages: result.rows,
     listing: listingResult.rows[0] || null,
+    commitment: commitmentResult.rows[0] || null,
+    sellerDeliveredAfterCommit,
   });
 }
 

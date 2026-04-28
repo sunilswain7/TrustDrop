@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import ShareLink from '@/components/ShareLink';
+import DirectCheckoutLink from '@/components/DirectCheckoutLink';
 
 interface SellerListing {
   id: string;
@@ -13,6 +15,7 @@ interface SellerListing {
   preview_url: string;
   preview_version: number;
   status: string;
+  checkout_session_id: string | null;
   checkout_url: string | null;
   created_at: string;
   updated_at: string;
@@ -270,14 +273,26 @@ function ListingRow({ listing }: { listing: SellerListing }) {
           {listing.sales_count === '1' ? '' : 's'}
         </p>
       </div>
-      <div className="text-right shrink-0">
+      <div className="text-right shrink-0 space-y-1.5">
         <p className="text-emerald-400 font-bold">${parseFloat(listing.price_usdc).toFixed(2)}</p>
         <Link
           href={`/listing/${listing.id}/room`}
-          className="text-xs text-zinc-400 hover:text-white transition"
+          className="block text-xs text-zinc-400 hover:text-white transition"
         >
           Open Room →
         </Link>
+        {!isSold && (
+          <div className="flex gap-1.5 justify-end">
+            <ShareLink
+              listingId={listing.id}
+              className="text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 px-2 py-1 rounded transition"
+            />
+            <DirectCheckoutLink
+              sessionId={listing.checkout_session_id}
+              className="text-xs bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 text-violet-300 px-2 py-1 rounded transition"
+            />
+          </div>
+        )}
       </div>
     </div>
   );
