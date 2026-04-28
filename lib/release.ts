@@ -1,6 +1,6 @@
 import { verifyPaymentOnChain } from './verification';
 import { query } from './db';
-import { sendPayment } from './locus';
+import { sendPayment, getCheckoutSession } from './locus';
 import crypto from 'crypto';
 
 interface PaymentDetails {
@@ -95,6 +95,44 @@ export async function handlePaymentConfirmed(
     listingRow.seller_id,
   ]);
 
+  // 8a. Forward the buyer's payment to the seller. Every Locus session deposits
+  // into the platform wallet (tied to LOCUS_API_KEY); the platform now forwards
+  // exactly what the buyer paid. The session amount already reflects any
+  // commitment deduction the buyer applied at checkout creation.
+  const sellerWalletResult = await query<{ locus_wallet_address: string }>(
+    `SELECT locus_wallet_address FROM users WHERE id = $1`,
+    [listingRow.seller_id]
+  );
+  const sellerWallet = sellerWalletResult.rows[0]?.locus_wallet_address;
+
+  if (sellerWallet) {
+    try {
+      const sessionResp = await getCheckoutSession(sessionId);
+      const sessionAmount = (sessionResp?.data?.amount || sessionResp?.amount) as
+        | string
+        | undefined;
+      if (!sessionAmount) {
+        console.error(`[RELEASE] Could not read session amount for ${sessionId}`);
+      } else if (parseFloat(sessionAmount) > 0) {
+        const { txHash: forwardTx } = await sendPayment({
+          to: sellerWallet,
+          amount: sessionAmount,
+          reason: `Purchase forwarding — listing ${listingRow.id}`,
+        });
+        console.log(
+          `[RELEASE] Forwarded $${sessionAmount} to seller ${sellerWallet} → ${forwardTx}`
+        );
+      } else {
+        console.log(`[RELEASE] Session amount is 0, skipping forward (commitment-only flow)`);
+      }
+    } catch (err) {
+      console.error(`[RELEASE] Forwarding to seller failed for ${sessionId}:`, err);
+      // Don't block the buyer's download — operator can resolve manually if needed.
+    }
+  } else {
+    console.error(`[RELEASE] Seller ${listingRow.seller_id} has no wallet on file`);
+  }
+
   // 9. Outcome A: release any HELD commitments to the seller and mark APPLIED.
   // The buyer's final payment was already discounted by these amounts, so the
   // platform now owes the seller the held funds.
@@ -109,12 +147,6 @@ export async function handlePaymentConfirmed(
        WHERE listing_id = $1 AND buyer_id = $2 AND status = 'HELD'`,
       [listingRow.id, buyerId]
     );
-
-    const sellerWalletResult = await query<{ locus_wallet_address: string }>(
-      `SELECT locus_wallet_address FROM users WHERE id = $1`,
-      [listingRow.seller_id]
-    );
-    const sellerWallet = sellerWalletResult.rows[0]?.locus_wallet_address;
 
     for (const c of held.rows) {
       try {
