@@ -6,6 +6,7 @@ import { LocusCheckout, type CheckoutSuccessData } from '@withlocus/checkout-rea
 interface LocusCheckoutButtonProps {
   listingId: string;
   sessionId: string | null;
+  checkoutUrl?: string | null;
   price: string;
   onSuccess?: (data: CheckoutSuccessData) => void;
 }
@@ -13,10 +14,12 @@ interface LocusCheckoutButtonProps {
 export default function LocusCheckoutButton({
   listingId,
   sessionId: initialSessionId,
+  checkoutUrl: initialCheckoutUrl,
   price,
   onSuccess,
 }: LocusCheckoutButtonProps) {
   const [sessionId, setSessionId] = useState(initialSessionId);
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(initialCheckoutUrl ?? null);
   const [showCheckout, setShowCheckout] = useState(false);
   const [creating, setCreating] = useState(false);
   const [paid, setPaid] = useState(false);
@@ -24,11 +27,9 @@ export default function LocusCheckoutButton({
   const [error, setError] = useState('');
 
   const ensureSession = useCallback(async () => {
-    if (sessionId) {
-      setShowCheckout(true);
-      return;
-    }
-
+    // Always (re)create the session on Buy click. The cached one on the listing
+    // may be stale — its amount might not reflect a buyer-specific commitment
+    // deduction, and the buyer wallet identity changes per buyer.
     setCreating(true);
     setError('');
 
@@ -46,13 +47,14 @@ export default function LocusCheckoutButton({
       }
 
       setSessionId(data.sessionId);
+      setCheckoutUrl(data.checkoutUrl || null);
       setShowCheckout(true);
     } catch {
       setError('Network error');
     } finally {
       setCreating(false);
     }
-  }, [listingId, sessionId]);
+  }, [listingId]);
 
   const handleSuccess = useCallback((data: CheckoutSuccessData) => {
     console.log('[CHECKOUT] Payment success:', data);
@@ -105,7 +107,7 @@ export default function LocusCheckoutButton({
             onCancel={() => setShowCheckout(false)}
             onError={handleError}
             mode="embedded"
-            checkoutUrl="https://checkout.paywithlocus.com"
+            {...(checkoutUrl ? { checkoutUrl } : {})}
           />
         </div>
       ) : (

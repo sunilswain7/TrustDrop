@@ -21,6 +21,7 @@ export default function CommitmentRequest({
   const [phase, setPhase] = useState<Phase>('idle');
   const [message, setMessage] = useState('');
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [amount, setAmount] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [showInput, setShowInput] = useState(false);
@@ -47,6 +48,7 @@ export default function CommitmentRequest({
         return;
       }
       setSessionId(data.sessionId);
+      setCheckoutUrl(data.checkoutUrl || null);
       setAmount(data.amount);
       setPhase('paying');
     } catch {
@@ -159,6 +161,7 @@ export default function CommitmentRequest({
               setError(e.message);
               setPhase('error');
             }}
+            {...(checkoutUrl ? { checkoutUrl } : {})}
           />
         </div>
       )}

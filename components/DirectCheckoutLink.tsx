@@ -1,28 +1,25 @@
 'use client';
 
 import { useState } from 'react';
-import { useLocusCheckout } from '@withlocus/checkout-react';
 
 interface DirectCheckoutLinkProps {
-  sessionId: string | null;
+  checkoutUrl: string | null;
   className?: string;
 }
 
-export default function DirectCheckoutLink({ sessionId, className }: DirectCheckoutLinkProps) {
-  const { getCheckoutUrl } = useLocusCheckout();
+export default function DirectCheckoutLink({ checkoutUrl, className }: DirectCheckoutLinkProps) {
   const [copied, setCopied] = useState(false);
 
-  if (!sessionId) return null;
+  if (!checkoutUrl) return null;
 
   async function handleCopy() {
-    if (!sessionId) return;
-    const url = getCheckoutUrl(sessionId);
+    if (!checkoutUrl) return;
     try {
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(checkoutUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Fall through silently.
+      // Clipboard can fail in some browser contexts; fall through silently.
     }
   }
 

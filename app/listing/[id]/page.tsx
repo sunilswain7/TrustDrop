@@ -229,6 +229,7 @@ export default function ListingPage() {
             <LocusCheckoutButton
               listingId={listing.id}
               sessionId={listing.checkout_session_id}
+              checkoutUrl={listing.checkout_url}
               price={breakdown?.finalAmount ?? listing.price_usdc}
               onSuccess={handlePaymentSuccess}
             />
@@ -277,7 +278,7 @@ export default function ListingPage() {
           {listing.status === 'ACTIVE' && (
             <div className="flex flex-wrap gap-2">
               <ShareLink listingId={listing.id} />
-              <DirectCheckoutLink sessionId={listing.checkout_session_id} />
+              <DirectCheckoutLink checkoutUrl={listing.checkout_url} />
             </div>
           )}
 

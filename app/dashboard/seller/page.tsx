@@ -288,7 +288,7 @@ function ListingRow({ listing }: { listing: SellerListing }) {
               className="text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 px-2 py-1 rounded transition"
             />
             <DirectCheckoutLink
-              sessionId={listing.checkout_session_id}
+              checkoutUrl={listing.checkout_url}
               className="text-xs bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 text-violet-300 px-2 py-1 rounded transition"
             />
           </div>

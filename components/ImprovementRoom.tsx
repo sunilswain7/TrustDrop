@@ -26,6 +26,7 @@ interface ListingContext {
   status: string;
   seller_id: string;
   checkout_session_id: string | null;
+  checkout_url: string | null;
 }
 
 interface Commitment {
@@ -270,7 +271,7 @@ export default function ImprovementRoom({
           {!isArchived && listing && (
             <div className="hidden sm:flex gap-2">
               <ShareLink listingId={listingId} />
-              <DirectCheckoutLink sessionId={listing.checkout_session_id} />
+              <DirectCheckoutLink checkoutUrl={listing.checkout_url} />
             </div>
           )}
 

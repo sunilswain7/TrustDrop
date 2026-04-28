@@ -36,7 +36,7 @@ export async function GET(
   // Also get listing info for room context
   const listingResult = await query(
     `SELECT l.id, l.title, l.price_usdc, l.preview_url, l.preview_version,
-            l.status, l.seller_id, l.checkout_session_id
+            l.status, l.seller_id, l.checkout_session_id, l.checkout_url
      FROM listings l WHERE l.id = $1`,
     [listingId]
   );
