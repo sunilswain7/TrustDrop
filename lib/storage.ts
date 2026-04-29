@@ -1,8 +1,8 @@
-import { supabaseAdmin, BUCKETS } from './supabase';
+import { getSupabaseAdmin, BUCKETS } from './supabase';
 
 export async function saveEncryptedFile(listingId: string, blob: Buffer): Promise<string> {
   const path = `${listingId}/encrypted.bin`;
-  const { error } = await supabaseAdmin.storage
+  const { error } = await getSupabaseAdmin().storage
     .from(BUCKETS.files)
     .upload(path, blob, { contentType: 'application/octet-stream', upsert: true });
   if (error) throw new Error(`Failed to upload encrypted file: ${error.message}`);
@@ -10,7 +10,7 @@ export async function saveEncryptedFile(listingId: string, blob: Buffer): Promis
 }
 
 export async function readEncryptedFile(filePath: string): Promise<Buffer> {
-  const { data, error } = await supabaseAdmin.storage
+  const { data, error } = await getSupabaseAdmin().storage
     .from(BUCKETS.files)
     .download(filePath);
   if (error || !data) throw new Error(`Failed to download encrypted file: ${error?.message}`);
@@ -18,7 +18,7 @@ export async function readEncryptedFile(filePath: string): Promise<Buffer> {
 }
 
 export async function deleteEncryptedFile(filePath: string): Promise<void> {
-  await supabaseAdmin.storage.from(BUCKETS.files).remove([filePath]);
+  await getSupabaseAdmin().storage.from(BUCKETS.files).remove([filePath]);
 }
 
 export async function savePreview(
@@ -27,11 +27,11 @@ export async function savePreview(
   imageBuffer: Buffer
 ): Promise<string> {
   const path = `${listingId}/v${version}.jpg`;
-  const { error } = await supabaseAdmin.storage
+  const { error } = await getSupabaseAdmin().storage
     .from(BUCKETS.previews)
     .upload(path, imageBuffer, { contentType: 'image/jpeg', upsert: true });
   if (error) throw new Error(`Failed to upload preview: ${error.message}`);
-  const { data: urlData } = supabaseAdmin.storage
+  const { data: urlData } = getSupabaseAdmin().storage
     .from(BUCKETS.previews)
     .getPublicUrl(path);
   return urlData.publicUrl;
@@ -39,7 +39,7 @@ export async function savePreview(
 
 export async function readPreview(_listingId: string, _fileName: string): Promise<Buffer> {
   const path = `${_listingId}/${_fileName}`;
-  const { data, error } = await supabaseAdmin.storage
+  const { data, error } = await getSupabaseAdmin().storage
     .from(BUCKETS.previews)
     .download(path);
   if (error || !data) throw new Error(`Failed to download preview: ${error?.message}`);
@@ -47,7 +47,7 @@ export async function readPreview(_listingId: string, _fileName: string): Promis
 }
 
 export async function createSignedUploadUrl(bucket: string, path: string) {
-  const { data, error } = await supabaseAdmin.storage
+  const { data, error } = await getSupabaseAdmin().storage
     .from(bucket)
     .createSignedUploadUrl(path);
   if (error || !data) throw new Error(`Failed to create signed URL: ${error?.message}`);
@@ -55,7 +55,7 @@ export async function createSignedUploadUrl(bucket: string, path: string) {
 }
 
 export async function downloadRawUpload(path: string): Promise<Buffer> {
-  const { data, error } = await supabaseAdmin.storage
+  const { data, error } = await getSupabaseAdmin().storage
     .from(BUCKETS.files)
     .download(path);
   if (error || !data) throw new Error(`Failed to download raw upload: ${error?.message}`);
@@ -63,5 +63,5 @@ export async function downloadRawUpload(path: string): Promise<Buffer> {
 }
 
 export async function deleteRawUpload(path: string): Promise<void> {
-  await supabaseAdmin.storage.from(BUCKETS.files).remove([path]);
+  await getSupabaseAdmin().storage.from(BUCKETS.files).remove([path]);
 }
