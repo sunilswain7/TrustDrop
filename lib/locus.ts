@@ -87,22 +87,21 @@ export async function sendPayment(params: {
   to: string;
   amount: string;
   reason?: string;
-}): Promise<{ txHash: string }> {
+}): Promise<{ txHash: string; transactionId: string }> {
   const res = await locusRequest('/pay/send', {
     method: 'POST',
     body: JSON.stringify({
-      to: params.to,
-      amount: params.amount,
-      reason: params.reason,
+      to_address: params.to,
+      amount: parseFloat(params.amount),
+      memo: params.reason || 'TrustDrop payout',
     }),
   });
-  // Beta API returns { success: true, data: { txHash } } per the existing pattern.
-  // Be defensive about either shape.
-  const txHash = (res?.data?.txHash || res?.txHash) as string | undefined;
-  if (!txHash) {
-    throw new Error('pay/send did not return a txHash');
+  const data = res?.data || res;
+  const transactionId = data?.transaction_id as string | undefined;
+  if (!transactionId) {
+    throw new Error('pay/send did not return a transaction_id');
   }
-  return { txHash };
+  return { txHash: transactionId, transactionId };
 }
 
 // Verify webhook signature (HMAC-SHA256)
