@@ -71,7 +71,7 @@ export async function POST(
         [c.id]
       );
 
-      const systemContent = `Seller did not deliver within 48h. Commitment fee ($${parseFloat(c.amount_usdc).toFixed(2)} USDC) refunded to buyer.`;
+      const systemContent = `Seller did not deliver in time. Commitment fee ($${parseFloat(c.amount_usdc).toFixed(2)} USDC) refunded to buyer.`;
       await query(
         `INSERT INTO room_messages (listing_id, sender_id, sender_role, message_type, content)
          VALUES ($1, $2, 'buyer', 'system', $3)`,

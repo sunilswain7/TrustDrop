@@ -7,6 +7,7 @@ import LocusCheckoutButton from '@/components/LocusCheckoutButton';
 import TxProof from '@/components/TxProof';
 import ShareLink from '@/components/ShareLink';
 import DirectCheckoutLink from '@/components/DirectCheckoutLink';
+import TipButton from '@/components/TipButton';
 import type { CheckoutSuccessData } from '@withlocus/checkout-react';
 
 interface Listing {
@@ -52,6 +53,7 @@ export default function ListingPage() {
   const [listing, setListing] = useState<Listing | null>(null);
   const [purchase, setPurchase] = useState<PurchaseInfo | null>(null);
   const [breakdown, setBreakdown] = useState<PriceBreakdown | null>(null);
+  const [isSeller, setIsSeller] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [txHash, setTxHash] = useState<string | null>(null);
@@ -65,6 +67,7 @@ export default function ListingPage() {
           setListing(data.listing);
           if (data.purchase) setPurchase(data.purchase);
           if (data.breakdown) setBreakdown(data.breakdown);
+          if (data.isSeller) setIsSeller(true);
         }
       })
       .catch(() => setError('Failed to load listing'))
@@ -244,8 +247,16 @@ export default function ListingPage() {
             </div>
           )}
 
+          {/* Seller badge */}
+          {isSeller && listing.status === 'ACTIVE' && (
+            <div className="bg-zinc-800 border border-zinc-700 rounded-lg p-4 text-center">
+              <p className="text-zinc-300 font-medium">This is your listing</p>
+              <p className="text-xs text-zinc-500 mt-1">You cannot buy your own product</p>
+            </div>
+          )}
+
           {/* Buy / Download section */}
-          {listing.status === 'ACTIVE' && !purchase && (
+          {listing.status === 'ACTIVE' && !purchase && !isSeller && (
             <LocusCheckoutButton
               listingId={listing.id}
               sessionId={listing.checkout_session_id}
@@ -300,6 +311,15 @@ export default function ListingPage() {
               <ShareLink listingId={listing.id} />
               <DirectCheckoutLink checkoutUrl={listing.checkout_url} />
             </div>
+          )}
+
+          {/* Tip / Support creator */}
+          {!isSeller && (
+            <TipButton
+              listingId={listing.id}
+              sellerWallet={listing.seller_wallet}
+              sellerName={listing.seller_name}
+            />
           )}
 
           {/* Improvement Room link */}

@@ -5,7 +5,8 @@ import { verifyPaymentOnChain } from '@/lib/verification';
 import { getCheckoutSession } from '@/lib/locus';
 import { broadcastToRoom } from '@/lib/websocket';
 
-const COMMITMENT_DEADLINE_HOURS = 48;
+// TODO: set back to 48 before launch
+const COMMITMENT_DEADLINE_MINUTES = 5;
 
 // POST /api/room/:id/commit/confirm
 // Called from the buyer client after the popup checkout's onSuccess.
@@ -77,7 +78,7 @@ export async function POST(
   const amount = sessionData.amount as string;
   const sellerId = meta.sellerId;
   const requestedChanges = meta.requestedChanges || '';
-  const deadline = new Date(Date.now() + COMMITMENT_DEADLINE_HOURS * 60 * 60 * 1000);
+  const deadline = new Date(Date.now() + COMMITMENT_DEADLINE_MINUTES * 60 * 1000);
 
   const insertResult = await query<{ id: string }>(
     `INSERT INTO commitments
@@ -100,7 +101,7 @@ export async function POST(
     );
   }
 
-  const systemContent = `Commitment locked: $${parseFloat(amount).toFixed(2)} USDC held by platform. Seller has ${COMMITMENT_DEADLINE_HOURS}h to deliver.`;
+  const systemContent = `Commitment locked: $${parseFloat(amount).toFixed(2)} USDC held by platform. Seller has ${COMMITMENT_DEADLINE_MINUTES}m to deliver.`;
   await query(
     `INSERT INTO room_messages (listing_id, sender_id, sender_role, message_type, content)
      VALUES ($1, $2, 'buyer', 'system', $3)`,
