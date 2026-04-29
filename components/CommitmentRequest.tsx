@@ -109,7 +109,7 @@ export default function CommitmentRequest({
           <p className="text-sm font-medium text-violet-300">Commit to request changes</p>
           <p className="text-xs text-zinc-500 mt-0.5">
             Pay 20% (≈ ${estimate}) to the platform. Released to seller on delivery,
-            refunded if seller doesn't deliver in 48h.
+            refunded if seller doesn't deliver in time.
           </p>
         </div>
         <button
@@ -154,7 +154,7 @@ export default function CommitmentRequest({
         <div className="rounded-lg overflow-hidden border border-zinc-700">
           <LocusCheckout
             sessionId={sessionId}
-            mode="popup"
+            mode="embedded"
             onSuccess={handleSuccess}
             onCancel={reset}
             onError={(e) => {
@@ -174,7 +174,7 @@ export default function CommitmentRequest({
 
       {phase === 'done' && (
         <p className="text-sm text-emerald-400 text-center py-2">
-          Commitment locked. Seller has 48h to deliver.
+          Commitment locked. Seller has 5m to deliver.
         </p>
       )}
 
