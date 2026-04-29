@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { LocusCheckout, type CheckoutSuccessData } from '@withlocus/checkout-react';
 
 interface CommitmentRequestProps {
@@ -25,6 +25,7 @@ export default function CommitmentRequest({
   const [amount, setAmount] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [showInput, setShowInput] = useState(false);
+  const [confirmRetries, setConfirmRetries] = useState(0);
 
   const estimate = (parseFloat(currentPrice) * 0.2).toFixed(2);
 
@@ -68,26 +69,41 @@ export default function CommitmentRequest({
     }
   }
 
-  async function handleSuccess(data: CheckoutSuccessData) {
-    setPhase('confirming');
+  const confirmPayment = useCallback(async (sid: string, txHash?: string, retry = 0): Promise<boolean> => {
     try {
       const res = await fetch(`/api/room/${listingId}/commit/confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, txHash: data.txHash }),
+        body: JSON.stringify({ sessionId: sid, txHash }),
       });
       const result = await res.json();
+      if (res.status === 409 && retry < 5) {
+        // Payment not yet visible on-chain — retry after delay
+        setConfirmRetries(retry + 1);
+        await new Promise((r) => setTimeout(r, 3000));
+        return confirmPayment(sid, txHash, retry + 1);
+      }
       if (!res.ok) {
         setError(result.error || 'Confirmation failed');
         setPhase('error');
-        return;
+        return false;
       }
-      setPhase('done');
-      setMessage('');
-      onConfirmed?.();
+      return true;
     } catch {
       setError('Confirmation network error');
       setPhase('error');
+      return false;
+    }
+  }, [listingId]);
+
+  async function handleSuccess(data: CheckoutSuccessData) {
+    setPhase('confirming');
+    setConfirmRetries(0);
+    const ok = await confirmPayment(sessionId!, data.txHash);
+    if (ok) {
+      setPhase('done');
+      setMessage('');
+      onConfirmed?.();
     }
   }
 
@@ -96,6 +112,7 @@ export default function CommitmentRequest({
     setSessionId(null);
     setAmount('');
     setError('');
+    setConfirmRetries(0);
   }
 
   if (!showInput && phase === 'idle') {
@@ -181,7 +198,9 @@ export default function CommitmentRequest({
       {phase === 'confirming' && (
         <div className="text-center py-4 space-y-2">
           <div className="inline-block w-5 h-5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-zinc-400">Verifying payment on-chain…</p>
+          <p className="text-sm text-zinc-400">
+            Verifying payment on-chain…{confirmRetries > 0 ? ` (attempt ${confirmRetries + 1}/6)` : ''}
+          </p>
         </div>
       )}
 
