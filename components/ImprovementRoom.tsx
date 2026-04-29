@@ -49,10 +49,13 @@ interface ImprovementRoomProps {
 function formatRemaining(deadlineIso: string): string {
   const ms = new Date(deadlineIso).getTime() - Date.now();
   if (ms <= 0) return 'expired';
-  const totalMin = Math.floor(ms / 60000);
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
 }
 
 export default function ImprovementRoom({
@@ -106,17 +109,27 @@ export default function ImprovementRoom({
     fetch(`/api/room/${listingId}/check-deadline`, { method: 'POST' }).catch(() => {});
   }, [fetchMessages, listingId]);
 
-  // 1-minute tick to refresh the countdown display
+  // 1-second tick to refresh the countdown display
   useEffect(() => {
-    const t = setInterval(() => setNowTick((x) => x + 1), 60000);
+    if (!commitment || commitment.status !== 'HELD') return;
+    const t = setInterval(() => setNowTick((x) => x + 1), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [commitment]);
 
   // Poll for new messages (fallback when WebSocket not available)
+  // Also check deadline every 30s when a commitment is held
   useEffect(() => {
-    const interval = setInterval(fetchMessages, 4000);
+    const interval = setInterval(() => {
+      fetchMessages();
+      if (commitment?.status === 'HELD') {
+        const deadlineMs = new Date(commitment.deadline).getTime() - Date.now();
+        if (deadlineMs <= 0) {
+          fetch(`/api/room/${listingId}/check-deadline`, { method: 'POST' }).catch(() => {});
+        }
+      }
+    }, 4000);
     return () => clearInterval(interval);
-  }, [fetchMessages]);
+  }, [fetchMessages, listingId, commitment]);
 
   useEffect(() => {
     scrollToBottom();
@@ -310,16 +323,32 @@ export default function ImprovementRoom({
       </div>
 
       {/* Commitment banner */}
-      {heldCommitment && (
-        <div className="border-b border-violet-500/30 bg-violet-500/10 px-4 py-2 text-sm text-violet-200 flex items-center justify-between gap-3">
-          <span>
-            {isSeller ? 'Buyer committed' : 'You committed'} ${parseFloat(heldCommitment.amount_usdc).toFixed(2)} —{' '}
-            {sellerDelivered
-              ? 'seller has delivered. Buyer can now Buy or Reject.'
-              : `seller has ${formatRemaining(heldCommitment.deadline)} to deliver.`}
-          </span>
-        </div>
-      )}
+      {heldCommitment && (() => {
+        const remaining = formatRemaining(heldCommitment.deadline);
+        const isExpired = remaining === 'expired';
+        const isUrgent = !isExpired && new Date(heldCommitment.deadline).getTime() - Date.now() < 60000;
+        return (
+          <div className={`border-b px-4 py-3 text-sm flex items-center justify-between gap-3 ${
+            isExpired ? 'border-red-500/30 bg-red-500/10 text-red-300' :
+            isUrgent ? 'border-orange-500/30 bg-orange-500/10 text-orange-300' :
+            'border-violet-500/30 bg-violet-500/10 text-violet-200'
+          }`}>
+            <span>
+              {isSeller ? 'Buyer committed' : 'You committed'} ${parseFloat(heldCommitment.amount_usdc).toFixed(2)} —{' '}
+              {sellerDelivered
+                ? 'Seller delivered. Buyer can now Buy or Reject.'
+                : isExpired
+                  ? 'Deadline expired. Refund processing…'
+                  : `Seller has ${remaining} to deliver.`}
+            </span>
+            {!sellerDelivered && !isExpired && (
+              <span className={`font-mono text-sm font-bold shrink-0 ${isUrgent ? 'text-orange-400 animate-pulse' : 'text-violet-300'}`}>
+                {remaining}
+              </span>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">

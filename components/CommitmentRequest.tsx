@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { LocusCheckout, type CheckoutSuccessData } from '@withlocus/checkout-react';
 
 interface CommitmentRequestProps {
@@ -27,6 +27,17 @@ export default function CommitmentRequest({
   const [showInput, setShowInput] = useState(false);
 
   const estimate = (parseFloat(currentPrice) * 0.2).toFixed(2);
+
+  // Auto-dismiss the "done" state after 3 seconds
+  useEffect(() => {
+    if (phase === 'done') {
+      const t = setTimeout(() => {
+        setShowInput(false);
+        setPhase('idle');
+      }, 3000);
+      return () => clearTimeout(t);
+    }
+  }, [phase]);
 
   async function startCommit() {
     setError('');
@@ -73,7 +84,6 @@ export default function CommitmentRequest({
       }
       setPhase('done');
       setMessage('');
-      setShowInput(false);
       onConfirmed?.();
     } catch {
       setError('Confirmation network error');
@@ -112,17 +122,19 @@ export default function CommitmentRequest({
             refunded if seller doesn't deliver in time.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            reset();
-            setShowInput(false);
-            setMessage('');
-          }}
-          className="text-xs text-zinc-500 hover:text-zinc-300"
-        >
-          Cancel
-        </button>
+        {phase !== 'confirming' && phase !== 'done' && (
+          <button
+            type="button"
+            onClick={() => {
+              reset();
+              setShowInput(false);
+              setMessage('');
+            }}
+            className="text-xs text-zinc-500 hover:text-zinc-300"
+          >
+            Cancel
+          </button>
+        )}
       </div>
 
       {phase === 'idle' && (
@@ -151,7 +163,7 @@ export default function CommitmentRequest({
       )}
 
       {phase === 'paying' && sessionId && (
-        <div className="rounded-lg overflow-hidden border border-zinc-700">
+        <div className="rounded-lg overflow-hidden border border-zinc-700 max-h-[350px] overflow-y-auto">
           <LocusCheckout
             sessionId={sessionId}
             mode="embedded"
@@ -167,15 +179,17 @@ export default function CommitmentRequest({
       )}
 
       {phase === 'confirming' && (
-        <p className="text-sm text-zinc-400 text-center py-2">
-          Verifying on-chain… (this is the same `sessionPaid()` check as the final purchase)
-        </p>
+        <div className="text-center py-4 space-y-2">
+          <div className="inline-block w-5 h-5 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-zinc-400">Verifying payment on-chain…</p>
+        </div>
       )}
 
       {phase === 'done' && (
-        <p className="text-sm text-emerald-400 text-center py-2">
-          Commitment locked. Seller has 5m to deliver.
-        </p>
+        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3 text-center">
+          <p className="text-sm text-emerald-400 font-medium">Commitment locked!</p>
+          <p className="text-xs text-zinc-500 mt-1">Seller has been notified. Timer started.</p>
+        </div>
       )}
 
       {phase === 'error' && (
