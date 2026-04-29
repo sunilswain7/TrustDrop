@@ -84,17 +84,27 @@ export async function POST(req: NextRequest) {
   // 3. Save encrypted file to Supabase
   const encryptedPath = await saveEncryptedFile(listingId, encryptedBlob);
 
-  // 4. Generate preview
+  // 4. Generate AI-powered preview
   let previewUrl: string;
+  let visionDesc: string | undefined;
+  const previewContext = { title, category };
   if (isImage) {
-    const previewBuffer = await generatePreview(fileBuffer);
+    const { previewBuffer, analysis } = await generatePreview(fileBuffer, previewContext);
     previewUrl = await savePreview(listingId, 1, previewBuffer);
+    visionDesc = analysis.description;
   } else {
     const { downloadRawUpload: dlPreview, deleteRawUpload: delPreview } = await import('@/lib/storage');
     const screenshotBuffer = await dlPreview(previewPath!);
-    const watermarked = await watermarkSellerScreenshot(screenshotBuffer);
-    previewUrl = await savePreview(listingId, 1, watermarked);
+    const { previewBuffer, analysis } = await watermarkSellerScreenshot(screenshotBuffer, previewContext);
+    previewUrl = await savePreview(listingId, 1, previewBuffer);
+    visionDesc = analysis.description;
     await delPreview(previewPath!).catch(() => {});
+  }
+
+  // Use AI-generated description if seller didn't provide one
+  if (!description && visionDesc) {
+    desc = visionDesc;
+    await query('UPDATE listings SET description = $1 WHERE id = $2', [desc, listingId]);
   }
 
   // 5. Delete raw upload from Supabase

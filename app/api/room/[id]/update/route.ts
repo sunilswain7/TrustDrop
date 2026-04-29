@@ -77,14 +77,15 @@ export async function POST(
     // 3. Save new encrypted file
     const newPath = await saveEncryptedFile(listingId, encryptedBlob);
 
-    // 4. Generate new preview
+    // 4. Generate new AI-powered preview
+    const previewContext = { title: listing.title as string, category: 'other' };
     if (isImage) {
-      const previewBuffer = await generatePreview(fileBuffer);
+      const { previewBuffer } = await generatePreview(fileBuffer, previewContext);
       newPreviewUrl = await savePreview(listingId, newVersion, previewBuffer);
     } else if (previewPath) {
       const screenshotBuffer = await downloadRawUpload(previewPath);
-      const watermarked = await watermarkSellerScreenshot(screenshotBuffer);
-      newPreviewUrl = await savePreview(listingId, newVersion, watermarked);
+      const { previewBuffer } = await watermarkSellerScreenshot(screenshotBuffer, previewContext);
+      newPreviewUrl = await savePreview(listingId, newVersion, previewBuffer);
       await deleteRawUpload(previewPath).catch(() => {});
     }
 
