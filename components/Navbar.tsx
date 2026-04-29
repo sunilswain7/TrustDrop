@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 
 interface User {
   id: string;
@@ -11,6 +12,7 @@ interface User {
 }
 
 export default function Navbar() {
+  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
@@ -19,6 +21,12 @@ export default function Navbar() {
       .then((data) => setUser(data?.user || null))
       .catch(() => setUser(null));
   }, []);
+
+  const handleLogout = useCallback(async () => {
+    await fetch('/api/auth', { method: 'DELETE' });
+    setUser(null);
+    router.push('/login');
+  }, [router]);
 
   return (
     <nav className="border-b border-zinc-800 bg-zinc-950">
@@ -50,6 +58,13 @@ export default function Navbar() {
                 <span className="text-xs text-zinc-500 font-mono">
                   {user.locus_wallet_address.slice(0, 6)}...{user.locus_wallet_address.slice(-4)}
                 </span>
+                <button
+                  onClick={handleLogout}
+                  className="text-xs text-zinc-500 hover:text-red-400 transition ml-1"
+                  title="Logout"
+                >
+                  Logout
+                </button>
               </div>
             </div>
           ) : (
