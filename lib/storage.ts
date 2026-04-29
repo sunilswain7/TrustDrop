@@ -65,3 +65,19 @@ export async function downloadRawUpload(path: string): Promise<Buffer> {
 export async function deleteRawUpload(path: string): Promise<void> {
   await getSupabaseAdmin().storage.from(BUCKETS.files).remove([path]);
 }
+
+export async function savePreviewGif(
+  listingId: string,
+  version: number,
+  gifBuffer: Buffer
+): Promise<string> {
+  const path = `${listingId}/v${version}-preview.gif`;
+  const { error } = await getSupabaseAdmin().storage
+    .from(BUCKETS.previews)
+    .upload(path, gifBuffer, { contentType: 'image/gif', upsert: true });
+  if (error) throw new Error(`Failed to upload preview GIF: ${error.message}`);
+  const { data: urlData } = getSupabaseAdmin().storage
+    .from(BUCKETS.previews)
+    .getPublicUrl(path);
+  return urlData.publicUrl;
+}

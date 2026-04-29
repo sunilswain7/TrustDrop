@@ -21,6 +21,8 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=8080
 
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+
 # Sharp + pg + ws are runtime deps; we keep all node_modules from build stage.
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next

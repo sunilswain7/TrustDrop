@@ -17,6 +17,8 @@ interface Listing {
   category: string;
   file_type: string;
   preview_url: string;
+  preview_gif_url: string | null;
+  video_duration: number | null;
   preview_version: number;
   status: string;
   created_at: string;
@@ -133,13 +135,22 @@ export default function ListingPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {/* Preview */}
         <div>
-          <div className="relative rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800">
+          <div className="relative rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800 group/preview">
             {listing.preview_url && listing.preview_url !== 'pending' ? (
-              <img
-                src={listing.preview_url}
-                alt={listing.title}
-                className="w-full aspect-square object-cover"
-              />
+              <>
+                <img
+                  src={listing.preview_url}
+                  alt={listing.title}
+                  className={`w-full aspect-square object-cover ${listing.preview_gif_url ? 'group-hover/preview:hidden' : ''}`}
+                />
+                {listing.preview_gif_url && (
+                  <img
+                    src={listing.preview_gif_url}
+                    alt={`${listing.title} preview`}
+                    className="w-full aspect-square object-cover hidden group-hover/preview:block"
+                  />
+                )}
+              </>
             ) : (
               <div className="w-full aspect-square flex items-center justify-center text-zinc-600">
                 Preview generating...
@@ -148,7 +159,16 @@ export default function ListingPage() {
             <div className="absolute top-3 right-3 bg-zinc-900/80 text-xs text-zinc-400 px-2 py-1 rounded">
               v{listing.preview_version}
             </div>
+            {listing.video_duration && (
+              <div className="absolute bottom-3 left-3 bg-black/70 text-white text-xs px-2 py-1 rounded flex items-center gap-1.5">
+                <span className="text-emerald-400">&#9654;</span>
+                {Math.floor(listing.video_duration / 60)}:{String(Math.floor(listing.video_duration % 60)).padStart(2, '0')}
+              </div>
+            )}
           </div>
+          {listing.preview_gif_url && (
+            <p className="text-xs text-zinc-600 text-center mt-2">Hover to see animated preview</p>
+          )}
         </div>
 
         {/* Details */}

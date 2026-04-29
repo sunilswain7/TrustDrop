@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { encryptFile } from '@/lib/encryption';
-import { saveEncryptedFile, savePreview, downloadRawUpload, deleteRawUpload } from '@/lib/storage';
+import { saveEncryptedFile, savePreview, savePreviewGif, downloadRawUpload, deleteRawUpload } from '@/lib/storage';
 import { generatePreview, watermarkSellerScreenshot } from '@/lib/preview';
 import { suggestPrice, generateDescription } from '@/lib/listing-agent';
 import { query } from '@/lib/db';
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
+const VIDEO_EXTENSIONS = ['mp4', 'mov', 'avi', 'webm', 'mkv'];
 
 // POST /api/listings — create a new listing from Supabase-uploaded files
 export async function POST(req: NextRequest) {
@@ -36,10 +37,11 @@ export async function POST(req: NextRequest) {
 
   const fileExt = fileName.split('.').pop()?.toLowerCase() || 'bin';
   const isImage = IMAGE_EXTENSIONS.includes(fileExt);
+  const isVideo = VIDEO_EXTENSIONS.includes(fileExt);
 
-  if (!isImage && !previewPath) {
+  if (!isImage && !isVideo && !previewPath) {
     return NextResponse.json(
-      { error: 'Non-image files require a preview screenshot' },
+      { error: 'Non-image/video files require a preview screenshot' },
       { status: 400 }
     );
   }
@@ -86,9 +88,19 @@ export async function POST(req: NextRequest) {
 
   // 4. Generate AI-powered preview
   let previewUrl: string;
+  let previewGifUrl: string | null = null;
+  let videoDuration: number | null = null;
   let visionDesc: string | undefined;
   const previewContext = { title, category };
-  if (isImage) {
+
+  if (isVideo) {
+    const { generateVideoPreview } = await import('@/lib/video-preview');
+    const { posterBuffer, gifBuffer, analysis, duration } = await generateVideoPreview(fileBuffer, previewContext);
+    previewUrl = await savePreview(listingId, 1, posterBuffer);
+    previewGifUrl = await savePreviewGif(listingId, 1, gifBuffer);
+    videoDuration = duration;
+    visionDesc = analysis.description;
+  } else if (isImage) {
     const { previewBuffer, analysis } = await generatePreview(fileBuffer, previewContext);
     previewUrl = await savePreview(listingId, 1, previewBuffer);
     visionDesc = analysis.description;
@@ -131,11 +143,13 @@ export async function POST(req: NextRequest) {
     console.warn('[LISTING] Could not create checkout session (will be created on buy):', err);
   }
 
-  // 7. Update listing with actual paths + checkout session
+  // 7. Update listing with actual paths + checkout session + video fields
   await query(
     `UPDATE listings SET encrypted_file_path = $1, preview_url = $2,
-     checkout_session_id = $3, checkout_url = $4 WHERE id = $5`,
-    [encryptedPath, previewUrl, checkoutSessionId, checkoutUrl, listingId]
+     checkout_session_id = $3, checkout_url = $4,
+     preview_gif_url = $5, video_duration = $6 WHERE id = $7`,
+    [encryptedPath, previewUrl, checkoutSessionId, checkoutUrl,
+     previewGifUrl, videoDuration, listingId]
   );
 
   return NextResponse.json({
@@ -144,6 +158,8 @@ export async function POST(req: NextRequest) {
     price,
     category,
     previewUrl,
+    previewGifUrl,
+    videoDuration,
     checkoutSessionId,
     checkoutUrl,
     status: 'ACTIVE',
@@ -163,6 +179,7 @@ export async function GET(req: NextRequest) {
     SELECT l.id, l.title, l.description, l.price_usdc, l.category,
            l.file_type, l.preview_url, l.preview_version, l.status,
            l.created_at, l.checkout_session_id, l.checkout_url,
+           l.preview_gif_url, l.video_duration,
            u.display_name as seller_name, u.trust_score as seller_trust,
            u.locus_wallet_address as seller_wallet
     FROM listings l

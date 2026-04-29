@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 
 interface ListingCardProps {
@@ -9,8 +10,18 @@ interface ListingCardProps {
   category: string;
   file_type: string;
   preview_url: string;
+  preview_gif_url?: string | null;
+  video_duration?: number | null;
   seller_name: string | null;
   seller_trust: number;
+}
+
+const VIDEO_EXTENSIONS = ['mp4', 'mov', 'avi', 'webm', 'mkv'];
+
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 export default function ListingCard({
@@ -18,21 +29,38 @@ export default function ListingCard({
   title,
   price_usdc,
   category,
+  file_type,
   preview_url,
+  preview_gif_url,
+  video_duration,
   seller_name,
   seller_trust,
 }: ListingCardProps) {
+  const [hovering, setHovering] = useState(false);
+  const isVideo = VIDEO_EXTENSIONS.includes(file_type);
+
   return (
     <Link href={`/listing/${id}`} className="group block">
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-zinc-700 transition">
         {/* Preview */}
-        <div className="aspect-square bg-zinc-800 relative overflow-hidden">
+        <div
+          className="aspect-square bg-zinc-800 relative overflow-hidden"
+          onMouseEnter={() => setHovering(true)}
+          onMouseLeave={() => setHovering(false)}
+        >
           {preview_url && preview_url !== 'pending' ? (
-            <img
-              src={preview_url}
-              alt={title}
-              className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-            />
+            <>
+              <img
+                src={hovering && preview_gif_url ? preview_gif_url : preview_url}
+                alt={title}
+                className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+              />
+              {isVideo && video_duration && (
+                <span className="absolute bottom-2 right-2 text-xs bg-black/70 text-white px-2 py-0.5 rounded flex items-center gap-1">
+                  <span className="text-emerald-400">&#9654;</span> {formatDuration(video_duration)}
+                </span>
+              )}
+            </>
           ) : (
             <div className="w-full h-full flex items-center justify-center text-zinc-600 text-sm">
               No preview

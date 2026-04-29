@@ -1,0 +1,2 @@
+ALTER TABLE listings ADD COLUMN IF NOT EXISTS preview_gif_url VARCHAR(500);
+ALTER TABLE listings ADD COLUMN IF NOT EXISTS video_duration DECIMAL(10,2);

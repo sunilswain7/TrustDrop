@@ -13,6 +13,7 @@ const CATEGORIES = [
 ];
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
+const VIDEO_EXTENSIONS = ['mp4', 'mov', 'avi', 'webm', 'mkv'];
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
 async function uploadToSupabase(file: File, fileType?: 'preview'): Promise<string> {
@@ -52,11 +53,11 @@ export default function SellPage() {
   const [uploadProgress, setUploadProgress] = useState('');
   const [error, setError] = useState('');
 
-  const isImage = file
-    ? IMAGE_EXTENSIONS.includes(file.name.split('.').pop()?.toLowerCase() || '')
-    : false;
+  const fileExt = file?.name.split('.').pop()?.toLowerCase() || '';
+  const isImage = file ? IMAGE_EXTENSIONS.includes(fileExt) : false;
+  const isVideo = file ? VIDEO_EXTENSIONS.includes(fileExt) : false;
 
-  const needsPreview = file && !isImage;
+  const needsPreview = file && !isImage && !isVideo;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -83,7 +84,7 @@ export default function SellPage() {
         previewPath = await uploadToSupabase(previewFile, 'preview');
       }
 
-      setUploadProgress('Encrypting & creating listing...');
+      setUploadProgress(isVideo ? 'Encrypting & generating video preview...' : 'Encrypting & creating listing...');
       const res = await fetch('/api/listings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -149,7 +150,7 @@ export default function SellPage() {
               <div>
                 <p className="text-zinc-400">Click to upload</p>
                 <p className="text-xs text-zinc-600 mt-1">
-                  .blend, .rbxm, .png, .schematic, etc. (max 50MB)
+                  .blend, .rbxm, .png, .mp4, .mov, .schematic, etc. (max 50MB)
                 </p>
               </div>
             )}
