@@ -13,6 +13,29 @@ const CATEGORIES = [
 ];
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
+
+async function uploadToSupabase(file: File, fileType?: 'preview'): Promise<string> {
+  const res = await fetch('/api/upload/signed-url', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fileName: file.name, fileType }),
+  });
+  if (!res.ok) throw new Error('Failed to get upload URL');
+  const { signedUrl, token, path } = await res.json();
+
+  const uploadRes = await fetch(signedUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': file.type || 'application/octet-stream',
+      'x-upsert': 'true',
+    },
+    body: file,
+  });
+  if (!uploadRes.ok) throw new Error('Failed to upload file');
+
+  return path;
+}
 
 export default function SellPage() {
   const router = useRouter();
@@ -26,6 +49,7 @@ export default function SellPage() {
   const [file, setFile] = useState<File | null>(null);
   const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
   const [error, setError] = useState('');
 
   const isImage = file
@@ -41,22 +65,38 @@ export default function SellPage() {
       setError('Non-image files require a preview screenshot');
       return;
     }
+    if (file.size > MAX_FILE_SIZE) {
+      setError('File too large (max 50MB)');
+      return;
+    }
 
     setSubmitting(true);
     setError('');
 
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('title', title);
-    formData.append('description', description);
-    formData.append('category', category);
-    if (price) formData.append('price', price);
-    if (previewFile) formData.append('preview', previewFile);
-
     try {
+      setUploadProgress('Uploading file...');
+      const filePath = await uploadToSupabase(file);
+
+      let previewPath: string | undefined;
+      if (previewFile) {
+        setUploadProgress('Uploading preview...');
+        previewPath = await uploadToSupabase(previewFile, 'preview');
+      }
+
+      setUploadProgress('Encrypting & creating listing...');
       const res = await fetch('/api/listings', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          description,
+          category,
+          price: price || undefined,
+          filePath,
+          previewPath,
+          fileName: file.name,
+          fileSize: file.size,
+        }),
       });
 
       const data = await res.json();
@@ -71,6 +111,7 @@ export default function SellPage() {
       setError('Network error. Please try again.');
     } finally {
       setSubmitting(false);
+      setUploadProgress('');
     }
   }
 
@@ -215,7 +256,7 @@ export default function SellPage() {
           disabled={submitting || !file || !title}
           className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:bg-zinc-700 disabled:cursor-not-allowed text-white font-medium py-3 rounded-lg transition"
         >
-          {submitting ? 'Encrypting & Listing...' : 'List for Sale'}
+          {submitting ? uploadProgress || 'Processing...' : 'List for Sale'}
         </button>
 
         <p className="text-xs text-zinc-600 text-center">

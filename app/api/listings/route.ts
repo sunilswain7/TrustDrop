@@ -1,57 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth';
 import { encryptFile } from '@/lib/encryption';
-import { saveEncryptedFile, savePreview } from '@/lib/storage';
+import { saveEncryptedFile, savePreview, downloadRawUpload, deleteRawUpload } from '@/lib/storage';
 import { generatePreview, watermarkSellerScreenshot } from '@/lib/preview';
 import { suggestPrice, generateDescription } from '@/lib/listing-agent';
 import { query } from '@/lib/db';
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
-// POST /api/listings — create a new listing
+// POST /api/listings — create a new listing from Supabase-uploaded files
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const formData = await req.formData();
-  const file = formData.get('file') as File | null;
-  const previewFile = formData.get('preview') as File | null;
-  const title = formData.get('title') as string;
-  const description = formData.get('description') as string;
-  const category = formData.get('category') as string;
-  const priceStr = formData.get('price') as string;
+  const body = await req.json();
+  const { title, description, category, price: priceStr, filePath, previewPath, fileName, fileSize } = body as {
+    title: string;
+    description: string;
+    category: string;
+    price?: string;
+    filePath: string;
+    previewPath?: string;
+    fileName: string;
+    fileSize: number;
+  };
 
-  // Validation
-  if (!file || !title || !category) {
+  if (!filePath || !title || !category || !fileName) {
     return NextResponse.json(
-      { error: 'file, title, and category are required' },
+      { error: 'filePath, fileName, title, and category are required' },
       { status: 400 }
     );
   }
 
-  if (file.size > MAX_FILE_SIZE) {
-    return NextResponse.json({ error: 'File too large (max 50MB)' }, { status: 400 });
-  }
-
-  const fileBuffer = Buffer.from(await file.arrayBuffer());
-  const fileExt = file.name.split('.').pop()?.toLowerCase() || 'bin';
+  const fileExt = fileName.split('.').pop()?.toLowerCase() || 'bin';
   const isImage = IMAGE_EXTENSIONS.includes(fileExt);
 
-  // Non-image files require a seller-provided screenshot
-  if (!isImage && !previewFile) {
+  if (!isImage && !previewPath) {
     return NextResponse.json(
       { error: 'Non-image files require a preview screenshot' },
       { status: 400 }
     );
   }
 
-  // 1. Encrypt the file
+  // 1. Download raw file from Supabase (server-to-server, no proxy limit)
+  const fileBuffer = await downloadRawUpload(filePath);
+
+  // 2. Encrypt the file
   const { encryptedBlob, encryptedKey, fileHash } = encryptFile(fileBuffer);
 
-  // 2. Create listing record first to get ID
   const userId = (user as { id: string }).id;
   const walletAddress = (user as { locus_wallet_address: string }).locus_wallet_address;
 
@@ -77,13 +75,13 @@ export async function POST(req: NextRequest) {
      RETURNING id`,
     [
       userId, title, desc, price, category, fileExt,
-      file.size, fileHash, 'pending', encryptedKey, 'pending', 'ACTIVE',
+      fileSize, fileHash, 'pending', encryptedKey, 'pending', 'ACTIVE',
     ]
   );
 
   const listingId = (insertResult.rows[0] as { id: string }).id;
 
-  // 3. Save encrypted file
+  // 3. Save encrypted file to Supabase
   const encryptedPath = await saveEncryptedFile(listingId, encryptedBlob);
 
   // 4. Generate preview
@@ -92,12 +90,17 @@ export async function POST(req: NextRequest) {
     const previewBuffer = await generatePreview(fileBuffer);
     previewUrl = await savePreview(listingId, 1, previewBuffer);
   } else {
-    const screenshotBuffer = Buffer.from(await previewFile!.arrayBuffer());
+    const { downloadRawUpload: dlPreview, deleteRawUpload: delPreview } = await import('@/lib/storage');
+    const screenshotBuffer = await dlPreview(previewPath!);
     const watermarked = await watermarkSellerScreenshot(screenshotBuffer);
     previewUrl = await savePreview(listingId, 1, watermarked);
+    await delPreview(previewPath!).catch(() => {});
   }
 
-  // 5. Create Locus Checkout session
+  // 5. Delete raw upload from Supabase
+  await deleteRawUpload(filePath).catch(() => {});
+
+  // 6. Create Locus Checkout session
   let checkoutSessionId: string | null = null;
   let checkoutUrl: string | null = null;
   const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
@@ -118,7 +121,7 @@ export async function POST(req: NextRequest) {
     console.warn('[LISTING] Could not create checkout session (will be created on buy):', err);
   }
 
-  // 6. Update listing with actual paths + checkout session
+  // 7. Update listing with actual paths + checkout session
   await query(
     `UPDATE listings SET encrypted_file_path = $1, preview_url = $2,
      checkout_session_id = $3, checkout_url = $4 WHERE id = $5`,
@@ -176,7 +179,6 @@ export async function GET(req: NextRequest) {
 
   const result = await query(sql, params);
 
-  // Get total count
   let countSql = 'SELECT COUNT(*) as total FROM listings WHERE status = $1';
   const countParams: unknown[] = [status];
   if (category) {

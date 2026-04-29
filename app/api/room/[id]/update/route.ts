@@ -41,12 +41,15 @@ export async function POST(
     return NextResponse.json({ error: 'Listing is not active' }, { status: 400 });
   }
 
-  const formData = await req.formData();
-  const file = formData.get('file') as File | null;
-  const previewFile = formData.get('preview') as File | null;
-  const newPriceStr = formData.get('price') as string | null;
+  const body = await req.json();
+  const { filePath, previewPath, price: newPriceStr, fileName } = body as {
+    filePath?: string;
+    previewPath?: string;
+    price?: string;
+    fileName?: string;
+  };
 
-  if (!file && !newPriceStr) {
+  if (!filePath && !newPriceStr) {
     return NextResponse.json(
       { error: 'Provide an updated file and/or new price' },
       { status: 400 }
@@ -60,8 +63,9 @@ export async function POST(
   const fileType = listing.file_type as string;
 
   // --- Handle file update ---
-  if (file) {
-    const fileBuffer = Buffer.from(await file.arrayBuffer());
+  if (filePath) {
+    const { downloadRawUpload, deleteRawUpload } = await import('@/lib/storage');
+    const fileBuffer = await downloadRawUpload(filePath);
     const isImage = IMAGE_EXTENSIONS.includes(fileType);
 
     // 1. Delete old encrypted file
@@ -77,18 +81,22 @@ export async function POST(
     if (isImage) {
       const previewBuffer = await generatePreview(fileBuffer);
       newPreviewUrl = await savePreview(listingId, newVersion, previewBuffer);
-    } else if (previewFile) {
-      const screenshotBuffer = Buffer.from(await previewFile.arrayBuffer());
+    } else if (previewPath) {
+      const screenshotBuffer = await downloadRawUpload(previewPath);
       const watermarked = await watermarkSellerScreenshot(screenshotBuffer);
       newPreviewUrl = await savePreview(listingId, newVersion, watermarked);
+      await deleteRawUpload(previewPath).catch(() => {});
     }
+
+    // Clean up raw upload
+    await deleteRawUpload(filePath).catch(() => {});
 
     // 5. Update listing with new file data
     await query(
       `UPDATE listings SET encrypted_file_path = $1, encryption_key_enc = $2,
        original_file_hash = $3, file_size_bytes = $4, preview_url = $5,
        preview_version = $6, updated_at = NOW() WHERE id = $7`,
-      [newPath, encryptedKey, fileHash, file.size, newPreviewUrl, newVersion, listingId]
+      [newPath, encryptedKey, fileHash, fileBuffer.length, newPreviewUrl, newVersion, listingId]
     );
 
     // Broadcast preview update
@@ -176,7 +184,7 @@ export async function POST(
   return NextResponse.json({
     success: true,
     previewUrl: newPreviewUrl,
-    previewVersion: file ? newVersion : currentVersion,
+    previewVersion: filePath ? newVersion : currentVersion,
     price: newPrice,
   });
 }

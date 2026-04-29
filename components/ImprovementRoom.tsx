@@ -181,6 +181,23 @@ export default function ImprovementRoom({
     }
   }
 
+  async function uploadToSupabase(file: File, fileType?: 'preview'): Promise<string> {
+    const res = await fetch('/api/upload/signed-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileName: file.name, fileType }),
+    });
+    if (!res.ok) throw new Error('Failed to get upload URL');
+    const { signedUrl, path } = await res.json();
+    const uploadRes = await fetch(signedUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-upsert': 'true' },
+      body: file,
+    });
+    if (!uploadRes.ok) throw new Error('Failed to upload file');
+    return path;
+  }
+
   // Seller: upload improved file + optional price change
   async function handleUpdate(e: React.FormEvent) {
     e.preventDefault();
@@ -188,14 +205,20 @@ export default function ImprovementRoom({
 
     setUpdating(true);
     try {
-      const formData = new FormData();
-      if (updateFile) formData.append('file', updateFile);
-      if (updatePreview) formData.append('preview', updatePreview);
-      if (updatePrice) formData.append('price', updatePrice);
+      let filePath: string | undefined;
+      let previewPath: string | undefined;
+      if (updateFile) filePath = await uploadToSupabase(updateFile);
+      if (updatePreview) previewPath = await uploadToSupabase(updatePreview, 'preview');
 
       const res = await fetch(`/api/room/${listingId}/update`, {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filePath,
+          previewPath,
+          price: updatePrice || undefined,
+          fileName: updateFile?.name,
+        }),
       });
 
       if (res.ok) {
