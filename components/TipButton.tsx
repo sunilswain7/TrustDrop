@@ -26,14 +26,20 @@ export default function TipButton({ listingId, sellerWallet, sellerName, sellerE
   const [tipped, setTipped] = useState(false);
   const [error, setError] = useState('');
 
-  const handleWalletTip = useCallback(async () => {
+  const handleTip = useCallback(async () => {
+    if (method === 'email' && (!emailInput || !emailInput.includes('@'))) {
+      setError('Please enter a valid email address');
+      return;
+    }
     setCreating(true);
     setError('');
     try {
+      const body: Record<string, string> = { amount, sellerWallet, sellerName: sellerName || '', listingId, deliveryMethod: method };
+      if (method === 'email') body.email = emailInput;
       const res = await fetch('/api/tip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount, sellerWallet, sellerName, listingId }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -48,38 +54,7 @@ export default function TipButton({ listingId, sellerWallet, sellerName, sellerE
     } finally {
       setCreating(false);
     }
-  }, [amount, sellerWallet, sellerName, listingId]);
-
-  const handleEmailTip = useCallback(async () => {
-    if (!emailInput || !emailInput.includes('@')) {
-      setError('Please enter a valid email address');
-      return;
-    }
-    setCreating(true);
-    setError('');
-    try {
-      const res = await fetch('/api/tip/email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount, email: emailInput, sellerName, listingId }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || 'Failed to send tip via email');
-        return;
-      }
-      setTipped(true);
-    } catch {
-      setError('Network error');
-    } finally {
-      setCreating(false);
-    }
-  }, [amount, emailInput, sellerName, listingId]);
-
-  const handleTip = useCallback(() => {
-    if (method === 'email') return handleEmailTip();
-    return handleWalletTip();
-  }, [method, handleEmailTip, handleWalletTip]);
+  }, [amount, sellerWallet, sellerName, listingId, method, emailInput]);
 
   const handleSuccess = useCallback((_data: CheckoutSuccessData) => {
     setTipped(true);

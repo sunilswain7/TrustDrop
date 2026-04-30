@@ -11,11 +11,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { amount, sellerWallet, sellerName, listingId } = (await req.json()) as {
+  const { amount, sellerWallet, sellerName, listingId, deliveryMethod, email } = (await req.json()) as {
     amount: string;
     sellerWallet: string;
     sellerName?: string;
     listingId: string;
+    deliveryMethod?: 'wallet' | 'email';
+    email?: string;
   };
 
   const tipAmount = parseFloat(amount);
@@ -23,17 +25,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid tip amount or missing fields' }, { status: 400 });
   }
 
+  if (deliveryMethod === 'email' && (!email || !email.includes('@'))) {
+    return NextResponse.json({ error: 'Valid email required for email delivery' }, { status: 400 });
+  }
+
+  const metadata: Record<string, string> = {
+    type: 'tip',
+    listingId,
+    sellerWallet,
+    buyerId: (user as { id: string }).id,
+    deliveryMethod: deliveryMethod || 'wallet',
+  };
+  if (deliveryMethod === 'email' && email) {
+    metadata.recipientEmail = email;
+  }
+
   const session = await createCheckoutSession({
     amount: String(tipAmount),
     description: `Tip for ${sellerName || 'creator'} via TrustDrop`,
     webhookUrl: `${APP_URL}/api/tip/webhook`,
     successUrl: `${APP_URL}/listing/${listingId}?tipped=true`,
-    metadata: {
-      type: 'tip',
-      listingId,
-      sellerWallet,
-      buyerId: (user as { id: string }).id,
-    },
+    metadata,
   });
 
   return NextResponse.json({

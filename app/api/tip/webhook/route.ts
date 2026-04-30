@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sendPayment, verifyWebhookSignature, getCheckoutSession } from '@/lib/locus';
+import { sendPayment, sendEmailPayment, verifyWebhookSignature, getCheckoutSession } from '@/lib/locus';
 
 // POST /api/tip/webhook — forward tip payment to seller wallet
 export async function POST(req: NextRequest) {
@@ -41,13 +41,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    const { txHash } = await sendPayment({
-      to: meta.sellerWallet,
-      amount: session.amount || '0',
-      reason: `TrustDrop tip — listing ${meta.listingId}`,
-    });
+    const tipAmount = session.amount || '0';
 
-    console.log(`[TIP-WEBHOOK] Forwarded $${session.amount} tip to ${meta.sellerWallet}, tx: ${txHash}`);
+    if (meta.deliveryMethod === 'email' && meta.recipientEmail) {
+      const { escrowId } = await sendEmailPayment({
+        email: meta.recipientEmail,
+        amount: tipAmount,
+        memo: `TrustDrop tip — listing ${meta.listingId}`,
+        expiresInDays: 30,
+      });
+      console.log(`[TIP-WEBHOOK] Sent $${tipAmount} tip via email to ${meta.recipientEmail}, escrow: ${escrowId}`);
+    } else {
+      const { txHash } = await sendPayment({
+        to: meta.sellerWallet,
+        amount: tipAmount,
+        reason: `TrustDrop tip — listing ${meta.listingId}`,
+      });
+      console.log(`[TIP-WEBHOOK] Forwarded $${tipAmount} tip to ${meta.sellerWallet}, tx: ${txHash}`);
+    }
   } catch (err) {
     console.error('[TIP-WEBHOOK] Failed to forward tip:', err);
   }
