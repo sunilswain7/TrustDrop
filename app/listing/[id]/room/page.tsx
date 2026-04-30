@@ -25,8 +25,8 @@ export default function RoomPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/auth').then((r) => (r.ok ? r.json() : null)),
-      fetch(`/api/listings/${listingId}`).then((r) => r.json()),
+      fetch('/api/auth', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)),
+      fetch(`/api/listings/${listingId}`, { cache: 'no-store' }).then((r) => r.json()),
     ])
       .then(([authData, listingData]) => {
         setUser(authData?.user || null);

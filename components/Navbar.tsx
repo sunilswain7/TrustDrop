@@ -20,11 +20,11 @@ export default function Navbar() {
   const pathname = usePathname();
 
   useEffect(() => {
-    fetch('/api/auth')
+    fetch('/api/auth', { cache: 'no-store' })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => setUser(data?.user || null))
       .catch(() => setUser(null));
-  }, []);
+  }, [pathname]);
 
   useEffect(() => {
     if (!showDropdown) return;
