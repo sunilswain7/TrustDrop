@@ -24,37 +24,64 @@ export default function ListingCard({
 }: ListingCardProps) {
   return (
     <Link href={`/listing/${id}`} className="group block">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-zinc-700 transition">
-        {/* Preview */}
-        <div className="aspect-square bg-zinc-800 relative overflow-hidden">
+      <div
+        className="bg-[var(--bg-cream-alt)] border-2 border-[var(--ink)] overflow-hidden transition-all duration-150"
+        style={{ boxShadow: '4px 4px 0 0 var(--shadow-hard)' }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLDivElement).style.boxShadow = '2px 2px 0 0 var(--shadow-hard)';
+          (e.currentTarget as HTMLDivElement).style.transform = 'translate(2px, 2px)';
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLDivElement).style.boxShadow = '4px 4px 0 0 var(--shadow-hard)';
+          (e.currentTarget as HTMLDivElement).style.transform = '';
+        }}
+      >
+        {/* Preview image */}
+        <div className="aspect-square bg-[#e8e0cc] relative overflow-hidden border-b-2 border-[var(--ink)]">
           {preview_url && preview_url !== 'pending' ? (
             <img
               src={preview_url}
               alt={title}
-              className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+              className="w-full h-full object-cover"
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-zinc-600 text-sm">
-              No preview
+            <div className="w-full h-full flex items-center justify-center">
+              <span className="text-[11px] text-[var(--ink-soft)] font-semibold uppercase tracking-wide">
+                No preview
+              </span>
             </div>
           )}
-          <span className="absolute top-2 left-2 text-xs bg-zinc-900/80 text-zinc-300 px-2 py-1 rounded">
+          {/* Category badge */}
+          <span
+            className="absolute top-2 left-2 text-[10px] border-2 border-[var(--ink)] px-2 py-0.5 font-semibold uppercase tracking-wider"
+            style={{
+              background: 'var(--accent-yellow)',
+              fontFamily: 'var(--font-display)',
+              boxShadow: '2px 2px 0 0 var(--shadow-hard)',
+            }}
+          >
             {category}
           </span>
         </div>
 
         {/* Info */}
-        <div className="p-4">
-          <h3 className="text-white font-medium truncate group-hover:text-emerald-400 transition">
+        <div className="p-3">
+          <h3
+            className="text-[13px] text-[var(--ink)] truncate uppercase"
+            style={{ fontFamily: 'var(--font-display)', letterSpacing: '-0.01em' }}
+          >
             {title}
           </h3>
           <div className="flex items-center justify-between mt-2">
-            <span className="text-emerald-400 font-bold">
+            <span
+              className="font-bold text-[15px] text-[var(--accent-green)]"
+              style={{ fontFamily: 'var(--font-display)' }}
+            >
               ${parseFloat(price_usdc).toFixed(2)}
             </span>
-            <div className="flex items-center gap-1 text-xs text-zinc-500">
+            <div className="flex items-center gap-1.5 text-[11px] text-[var(--ink-soft)]">
               <span>{seller_name || 'Anon'}</span>
-              <span className="text-emerald-400/60">({seller_trust})</span>
+              <span className="text-[var(--accent-green)] font-bold">({seller_trust})</span>
             </div>
           </div>
         </div>

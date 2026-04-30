@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import CommitmentRequest from './CommitmentRequest';
 import ShareLink from './ShareLink';
 import DirectCheckoutLink from './DirectCheckoutLink';
+import { SkeletonRoom } from './Skeleton';
 
 interface Message {
   id: string;
@@ -71,7 +72,6 @@ export default function ImprovementRoom({
   const [, setNowTick] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Seller update state
   const [showUpdatePanel, setShowUpdatePanel] = useState(false);
   const [updateFile, setUpdateFile] = useState<File | null>(null);
   const [updatePreview, setUpdatePreview] = useState<File | null>(null);
@@ -84,7 +84,6 @@ export default function ImprovementRoom({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
 
-  // Fetch messages
   const fetchMessages = useCallback(async () => {
     try {
       const res = await fetch(`/api/room/${listingId}/messages`);
@@ -102,17 +101,14 @@ export default function ImprovementRoom({
 
   useEffect(() => {
     fetchMessages();
-    // Trigger deadline check on Room load (Outcome C). Best-effort.
     fetch(`/api/room/${listingId}/check-deadline`, { method: 'POST' }).catch(() => {});
   }, [fetchMessages, listingId]);
 
-  // 1-minute tick to refresh the countdown display
   useEffect(() => {
     const t = setInterval(() => setNowTick((x) => x + 1), 60000);
     return () => clearInterval(t);
   }, []);
 
-  // Poll for new messages (fallback when WebSocket not available)
   useEffect(() => {
     const interval = setInterval(fetchMessages, 4000);
     return () => clearInterval(interval);
@@ -122,7 +118,6 @@ export default function ImprovementRoom({
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  // WebSocket connection
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const role = isSeller ? 'seller' : 'buyer';
@@ -133,10 +128,7 @@ export default function ImprovementRoom({
       ws = new WebSocket(wsUrl);
       ws.onmessage = (event) => {
         const msg = JSON.parse(event.data);
-        // Refresh messages on any incoming WS message
         fetchMessages();
-
-        // Update listing context for price/preview changes
         if (msg.type === 'price_update' && msg.newPrice) {
           setListing((prev) => prev ? { ...prev, price_usdc: String(msg.newPrice) } : prev);
         }
@@ -155,13 +147,10 @@ export default function ImprovementRoom({
       // WS not available, polling handles it
     }
 
-    return () => {
-      ws?.close();
-    };
+    return () => { ws?.close(); };
   }, [listingId, currentUserId, isSeller, fetchMessages]);
 
-  // Send text message
-  async function handleSend(e: React.FormEvent) {
+  async function handleSend(e: { preventDefault(): void }) {
     e.preventDefault();
     if (!newMessage.trim() || sending) return;
 
@@ -181,8 +170,7 @@ export default function ImprovementRoom({
     }
   }
 
-  // Seller: upload improved file + optional price change
-  async function handleUpdate(e: React.FormEvent) {
+  async function handleUpdate(e: { preventDefault(): void }) {
     e.preventDefault();
     if (!updateFile && !updatePrice) return;
 
@@ -243,44 +231,53 @@ export default function ImprovementRoom({
     }
   }
 
+  if (loading) return <SkeletonRoom />;
+
   return (
     <div className="flex flex-col h-full">
+
       {/* Room header */}
-      <div className="border-b border-zinc-800 p-4 flex items-center justify-between">
-        <div>
-          <h2 className="font-semibold text-white">{listing?.title || 'Improvement Room'}</h2>
-          <div className="flex items-center gap-3 mt-1">
-            <span className="text-sm text-emerald-400 font-medium">
+      <div className="border-b-2 border-[var(--ink)] bg-[var(--bg-cream)] p-3 sm:p-4 flex items-center justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <h2
+            className="font-bold text-[var(--ink)] truncate uppercase text-sm sm:text-base"
+            style={{ fontFamily: 'var(--font-display)' }}
+          >
+            {listing?.title || 'Improvement Room'}
+          </h2>
+          <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+            <span className="text-sm font-bold text-[var(--accent-green)]">
               ${listing ? parseFloat(listing.price_usdc).toFixed(2) : '—'} USDC
             </span>
             {listing && (
-              <span className="text-xs text-zinc-500">
+              <span className="text-[11px] text-[var(--ink-soft)] uppercase font-semibold tracking-wide" style={{ fontFamily: 'var(--font-display)' }}>
                 Preview v{listing.preview_version}
               </span>
             )}
             {isArchived && (
-              <span className="text-xs bg-zinc-700 text-zinc-400 px-2 py-0.5 rounded">
+              <span
+                className="text-[10px] border border-[var(--ink)] px-2 py-0.5 uppercase font-bold tracking-wide"
+                style={{ fontFamily: 'var(--font-display)', background: 'var(--bg-cream-alt)' }}
+              >
                 Archived
               </span>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Share buttons — only meaningful while listing is active */}
+        <div className="flex items-center gap-2 shrink-0">
           {!isArchived && listing && (
             <div className="hidden sm:flex gap-2">
               <ShareLink listingId={listingId} />
               <DirectCheckoutLink checkoutUrl={listing.checkout_url} />
             </div>
           )}
-
-          {/* Preview thumbnail */}
           {listing?.preview_url && listing.preview_url !== 'pending' && (
             <img
               src={listing.preview_url}
               alt="Current preview"
-              className="w-16 h-16 rounded-lg object-cover border border-zinc-700"
+              className="w-12 h-12 sm:w-14 sm:h-14 object-cover border-2 border-[var(--ink)]"
+              style={{ boxShadow: '2px 2px 0 0 var(--shadow-hard)' }}
             />
           )}
         </div>
@@ -288,24 +285,27 @@ export default function ImprovementRoom({
 
       {/* Commitment banner */}
       {heldCommitment && (
-        <div className="border-b border-violet-500/30 bg-violet-500/10 px-4 py-2 text-sm text-violet-200 flex items-center justify-between gap-3">
+        <div className="border-b-2 border-[var(--ink)] bg-[var(--accent-yellow)] px-4 py-2 text-sm font-semibold text-[var(--ink)] flex items-center justify-between gap-3 flex-wrap">
           <span>
             {isSeller ? 'Buyer committed' : 'You committed'} ${parseFloat(heldCommitment.amount_usdc).toFixed(2)} —{' '}
             {sellerDelivered
-              ? 'seller has delivered. Buyer can now Buy or Reject.'
+              ? 'seller delivered. Buy or Reject below.'
               : `seller has ${formatRemaining(heldCommitment.deadline)} to deliver.`}
           </span>
         </div>
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {loading ? (
-          <div className="text-center text-zinc-600 py-8">Loading messages...</div>
-        ) : messages.length === 0 ? (
-          <div className="text-center text-zinc-600 py-8">
-            <p>No messages yet.</p>
-            <p className="text-sm mt-1">Start a conversation about this listing.</p>
+      <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 bg-[var(--bg-cream)]">
+        {messages.length === 0 ? (
+          <div className="text-center py-12">
+            <p
+              className="text-[var(--ink-soft)] font-bold uppercase tracking-wide text-sm"
+              style={{ fontFamily: 'var(--font-display)' }}
+            >
+              No messages yet.
+            </p>
+            <p className="text-sm text-[var(--ink-soft)] mt-1">Start a conversation about this listing.</p>
           </div>
         ) : (
           messages.map((msg) => {
@@ -315,14 +315,18 @@ export default function ImprovementRoom({
             if (isSystem) {
               return (
                 <div key={msg.id} className="text-center py-2">
-                  <span className="text-xs bg-zinc-800 text-zinc-400 px-3 py-1 rounded-full">
+                  <span
+                    className="text-[11px] border-2 border-[var(--ink)] px-3 py-1 font-semibold uppercase tracking-wide inline-block"
+                    style={{ background: 'var(--bg-cream-alt)', fontFamily: 'var(--font-display)', boxShadow: '2px 2px 0 0 var(--shadow-hard)' }}
+                  >
                     {msg.content}
                   </span>
                   {msg.preview_url && (
                     <img
                       src={msg.preview_url}
                       alt="Updated preview"
-                      className="mx-auto mt-2 w-48 rounded-lg border border-zinc-700"
+                      className="mx-auto mt-2 w-40 sm:w-48 border-2 border-[var(--ink)]"
+                      style={{ boxShadow: '3px 3px 0 0 var(--shadow-hard)' }}
                     />
                   )}
                 </div>
@@ -330,22 +334,20 @@ export default function ImprovementRoom({
             }
 
             return (
-              <div
-                key={msg.id}
-                className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
-              >
+              <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                 <div
-                  className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${
+                  className={`max-w-[85%] sm:max-w-[75%] px-4 py-3 border-2 border-[var(--ink)] ${
                     isMe
-                      ? 'bg-emerald-600 text-white rounded-br-sm'
-                      : 'bg-zinc-800 text-zinc-200 rounded-bl-sm'
+                      ? 'bg-[var(--accent-green)] text-[var(--ink)]'
+                      : 'bg-[var(--bg-cream-alt)] text-[var(--ink)]'
                   }`}
+                  style={{ boxShadow: isMe ? '3px 3px 0 0 var(--shadow-hard)' : '3px 3px 0 0 var(--shadow-hard)' }}
                 >
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className={`text-xs font-medium ${isMe ? 'text-emerald-200' : 'text-zinc-400'}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[11px] font-bold uppercase tracking-wide" style={{ fontFamily: 'var(--font-display)' }}>
                       {msg.sender_name || (msg.sender_role === 'seller' ? 'Seller' : 'Buyer')}
                     </span>
-                    <span className={`text-xs ${isMe ? 'text-emerald-300/60' : 'text-zinc-600'}`}>
+                    <span className="text-[11px] text-[var(--ink-soft)]">
                       {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
@@ -360,41 +362,32 @@ export default function ImprovementRoom({
 
       {/* Seller update panel */}
       {isSeller && !isArchived && showUpdatePanel && (
-        <div className="border-t border-zinc-800 p-4 bg-zinc-900/50">
+        <div className="border-t-2 border-[var(--ink)] p-4 bg-[var(--bg-cream-alt)]">
           <form onSubmit={handleUpdate} className="space-y-3">
-            <div className="flex gap-3">
+            <div className="flex gap-2 flex-wrap sm:flex-nowrap">
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="flex-1 text-sm bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-300 transition truncate"
+                className="btn-secondary flex-1 text-[11px] truncate"
+                style={{ padding: '7px 12px', fontSize: '11px' }}
               >
                 {updateFile ? updateFile.name : 'Upload improved file'}
               </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                onChange={(e) => setUpdateFile(e.target.files?.[0] || null)}
-              />
+              <input ref={fileInputRef} type="file" className="hidden" onChange={(e) => setUpdateFile(e.target.files?.[0] || null)} />
               <button
                 type="button"
                 onClick={() => previewInputRef.current?.click()}
-                className="text-sm bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg px-3 py-2 text-zinc-300 transition"
+                className="btn-secondary text-[11px]"
+                style={{ padding: '7px 12px', fontSize: '11px' }}
               >
-                {updatePreview ? 'Screenshot added' : '+ Screenshot'}
+                {updatePreview ? '✓ Screenshot' : '+ Screenshot'}
               </button>
-              <input
-                ref={previewInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => setUpdatePreview(e.target.files?.[0] || null)}
-              />
+              <input ref={previewInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => setUpdatePreview(e.target.files?.[0] || null)} />
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex gap-2">
               <div className="relative flex-1">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 text-sm">$</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ink-soft)] text-sm font-bold">$</span>
                 <input
                   type="number"
                   step="0.01"
@@ -402,38 +395,42 @@ export default function ImprovementRoom({
                   value={updatePrice}
                   onChange={(e) => setUpdatePrice(e.target.value)}
                   placeholder={listing ? parseFloat(listing.price_usdc).toFixed(2) : 'New price'}
-                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg pl-7 pr-3 py-2 text-white text-sm placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500"
+                  className="input-retro pl-7"
+                  style={{ padding: '8px 14px 8px 28px' }}
                 />
               </div>
               <button
                 type="submit"
                 disabled={updating || (!updateFile && !updatePrice)}
-                className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-zinc-700 disabled:cursor-not-allowed text-white text-sm font-medium px-4 py-2 rounded-lg transition"
+                className="btn-primary text-[11px]"
+                style={{ padding: '8px 14px', fontSize: '11px' }}
               >
-                {updating ? 'Updating...' : 'Push Update'}
+                {updating ? 'Updating…' : 'Push Update'}
               </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* Buyer's post-delivery actions: Buy or Reject */}
+      {/* Buyer post-delivery actions */}
       {myHeldCommitment && sellerDelivered && !isArchived && (
-        <div className="border-t border-zinc-800 p-4 bg-emerald-500/5 flex items-center justify-between gap-3">
-          <span className="text-sm text-emerald-300">
-            Seller delivered. Buy now (commitment is deducted from total) or reject.
+        <div className="border-t-2 border-[var(--ink)] p-4 bg-[var(--accent-yellow)] flex items-center justify-between gap-3 flex-wrap">
+          <span className="text-sm font-semibold text-[var(--ink)]">
+            Seller delivered. Commitment deducted from final price.
           </span>
           <div className="flex gap-2 shrink-0">
             <button
               onClick={handleReject}
               disabled={rejecting}
-              className="text-sm border border-zinc-700 hover:border-red-500/50 text-zinc-300 hover:text-red-400 px-3 py-2 rounded-lg transition disabled:opacity-50"
+              className="btn-destructive text-[12px] disabled:opacity-50"
+              style={{ padding: '7px 14px', fontSize: '12px' }}
             >
               {rejecting ? 'Releasing…' : 'Reject'}
             </button>
             <a
               href={`/listing/${listingId}`}
-              className="text-sm bg-emerald-500 hover:bg-emerald-600 text-white font-medium px-3 py-2 rounded-lg transition"
+              className="btn-primary text-[12px]"
+              style={{ padding: '7px 14px', fontSize: '12px' }}
             >
               Buy
             </a>
@@ -441,9 +438,9 @@ export default function ImprovementRoom({
         </div>
       )}
 
-      {/* Commitment input (buyer only, when no HELD commitment of theirs exists) */}
+      {/* Commitment input (buyer only) */}
       {!isSeller && !isArchived && !myHeldCommitment && listing && (
-        <div className="border-t border-zinc-800 px-4 py-2 flex justify-end">
+        <div className="border-t-2 border-[var(--ink)] px-4 py-2 flex justify-end bg-[var(--bg-cream)]">
           <CommitmentRequest
             listingId={listingId}
             currentPrice={listing.price_usdc}
@@ -454,16 +451,13 @@ export default function ImprovementRoom({
 
       {/* Message input */}
       {!isArchived && (
-        <div className="border-t border-zinc-800 p-4">
+        <div className="border-t-2 border-[var(--ink)] bg-[var(--bg-cream)] p-3 sm:p-4">
           <div className="flex gap-2">
             {isSeller && (
               <button
                 onClick={() => setShowUpdatePanel(!showUpdatePanel)}
-                className={`shrink-0 text-sm px-3 py-2 rounded-lg border transition ${
-                  showUpdatePanel
-                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                    : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-white'
-                }`}
+                className={showUpdatePanel ? 'btn-primary text-[11px]' : 'btn-secondary text-[11px]'}
+                style={{ padding: '8px 12px', fontSize: '11px', flexShrink: 0 }}
                 title="Upload improved version"
               >
                 Update
@@ -474,16 +468,17 @@ export default function ImprovementRoom({
                 type="text"
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
-                placeholder={isArchived ? 'Room archived' : 'Type a message...'}
-                disabled={isArchived}
-                className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-2 text-white text-sm placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500"
+                placeholder="Type a message…"
+                className="input-retro flex-1"
+                style={{ padding: '8px 14px' }}
               />
               <button
                 type="submit"
                 disabled={sending || !newMessage.trim()}
-                className="bg-emerald-500 hover:bg-emerald-600 disabled:bg-zinc-700 disabled:cursor-not-allowed text-white text-sm font-medium px-4 py-2 rounded-lg transition"
+                className="btn-primary text-[11px]"
+                style={{ padding: '8px 16px', fontSize: '11px', flexShrink: 0 }}
               >
-                Send
+                {sending ? '…' : 'Send'}
               </button>
             </form>
           </div>
@@ -491,8 +486,13 @@ export default function ImprovementRoom({
       )}
 
       {isArchived && (
-        <div className="border-t border-zinc-800 p-4 text-center text-sm text-zinc-500">
-          This room is archived. The item has been sold.
+        <div className="border-t-2 border-[var(--ink)] bg-[var(--bg-cream-alt)] p-4 text-center">
+          <span
+            className="text-[12px] font-bold text-[var(--ink-soft)] uppercase tracking-wide"
+            style={{ fontFamily: 'var(--font-display)' }}
+          >
+            Room archived — item sold.
+          </span>
         </div>
       )}
     </div>

@@ -21,16 +21,17 @@ export default function ShareLink({ listingId, className }: ShareLinkProps) {
     }
   }
 
+  const defaultClass =
+    'btn-secondary text-[11px] py-1.5 px-3';
+
   return (
     <button
       type="button"
       onClick={handleCopy}
-      className={
-        className ??
-        'text-sm bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 px-3 py-2 rounded-lg transition'
-      }
+      className={className ?? defaultClass}
+      style={className ? undefined : { fontSize: '11px', padding: '6px 12px' }}
     >
-      {copied ? 'Copied' : 'Copy Link for Discord'}
+      {copied ? '✓ Copied' : 'Copy Link'}
     </button>
   );
 }

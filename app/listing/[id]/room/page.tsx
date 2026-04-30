@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import ImprovementRoom from '@/components/ImprovementRoom';
+import { SkeletonRoom } from '@/components/Skeleton';
 
 interface User {
   id: string;
@@ -18,7 +19,6 @@ interface ListingBasic {
 
 export default function RoomPage() {
   const { id: listingId } = useParams();
-  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [listing, setListing] = useState<ListingBasic | null>(null);
   const [loading, setLoading] = useState(true);
@@ -38,20 +38,30 @@ export default function RoomPage() {
 
   if (loading) {
     return (
-      <div className="h-[calc(100vh-4rem)] flex items-center justify-center">
-        <p className="text-zinc-500">Loading room...</p>
+      <div
+        className="h-[calc(100vh-3.5rem)] flex flex-col bg-[var(--bg-cream)] border-t-2 border-[var(--ink)]"
+      >
+        <div className="border-b-2 border-[var(--ink)] bg-[var(--bg-cream)] px-4 sm:px-6 py-3 flex items-center gap-4">
+          <div className="skeleton h-4 w-24" />
+          <div className="skeleton h-4 w-32" />
+        </div>
+        <div className="flex-1 overflow-hidden">
+          <SkeletonRoom />
+        </div>
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="h-[calc(100vh-4rem)] flex flex-col items-center justify-center gap-4">
-        <p className="text-zinc-400">You need to log in to use the Improvement Room.</p>
-        <Link
-          href="/login"
-          className="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-2 rounded-lg transition"
+      <div className="h-[calc(100vh-3.5rem)] flex flex-col items-center justify-center gap-6 bg-[var(--bg-cream)] px-4">
+        <p
+          className="font-bold text-[var(--ink)] uppercase text-sm tracking-wide"
+          style={{ fontFamily: 'var(--font-display)' }}
         >
+          Log in to use the Improvement Room.
+        </p>
+        <Link href="/login" className="btn-primary">
           Connect Wallet
         </Link>
       </div>
@@ -60,8 +70,13 @@ export default function RoomPage() {
 
   if (!listing) {
     return (
-      <div className="h-[calc(100vh-4rem)] flex items-center justify-center">
-        <p className="text-red-400">Listing not found.</p>
+      <div className="h-[calc(100vh-3.5rem)] flex items-center justify-center bg-[var(--bg-cream)] px-4">
+        <div
+          className="border-2 border-[var(--ink)] bg-[var(--accent-coral)] text-white px-6 py-4 font-bold uppercase text-sm"
+          style={{ fontFamily: 'var(--font-display)', boxShadow: '4px 4px 0 0 var(--shadow-hard)' }}
+        >
+          Listing not found.
+        </div>
       </div>
     );
   }
@@ -69,16 +84,25 @@ export default function RoomPage() {
   const isSeller = listing.seller_id === user.id;
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex flex-col">
-      {/* Back link */}
-      <div className="border-b border-zinc-800 px-4 py-2 flex items-center gap-4">
+    <div className="h-[calc(100vh-3.5rem)] flex flex-col bg-[var(--bg-cream)]">
+      {/* Top bar */}
+      <div className="border-b-2 border-[var(--ink)] bg-[var(--bg-cream)] px-4 sm:px-6 py-3 flex items-center gap-4 shrink-0">
         <Link
           href={`/listing/${listingId}`}
-          className="text-sm text-zinc-400 hover:text-white transition"
+          className="text-[11px] font-bold text-[var(--ink-soft)] hover:text-[var(--accent-green)] transition-colors uppercase tracking-wide"
+          style={{ fontFamily: 'var(--font-display)' }}
         >
-          &larr; Back to listing
+          ← Back to listing
         </Link>
-        <span className="text-xs text-zinc-600">
+        <span
+          className="text-[10px] border-2 border-[var(--ink)] px-2 py-0.5 font-bold uppercase"
+          style={{
+            fontFamily: 'var(--font-display)',
+            background: isSeller ? 'var(--accent-yellow)' : 'var(--accent-blue)',
+            color: 'var(--ink)',
+            boxShadow: '2px 2px 0 0 var(--shadow-hard)',
+          }}
+        >
           {isSeller ? 'You are the seller' : 'You are a buyer'}
         </span>
       </div>

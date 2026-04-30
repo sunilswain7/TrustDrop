@@ -4,16 +4,17 @@ import { useState } from 'react';
 
 interface DirectCheckoutLinkProps {
   checkoutUrl: string | null;
+  disabled?: boolean;
   className?: string;
 }
 
-export default function DirectCheckoutLink({ checkoutUrl, className }: DirectCheckoutLinkProps) {
+export default function DirectCheckoutLink({ checkoutUrl, disabled = false, className }: DirectCheckoutLinkProps) {
   const [copied, setCopied] = useState(false);
 
   if (!checkoutUrl) return null;
 
   async function handleCopy() {
-    if (!checkoutUrl) return;
+    if (!checkoutUrl || disabled) return;
     try {
       await navigator.clipboard.writeText(checkoutUrl);
       setCopied(true);
@@ -27,12 +28,17 @@ export default function DirectCheckoutLink({ checkoutUrl, className }: DirectChe
     <button
       type="button"
       onClick={handleCopy}
+      disabled={disabled}
       className={
         className ??
-        'text-sm bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 text-violet-300 px-3 py-2 rounded-lg transition'
+        (disabled
+          ? 'btn-secondary opacity-40 cursor-not-allowed text-[11px]'
+          : 'btn-primary text-[11px]')
       }
+      style={{ fontSize: '11px', padding: '6px 12px' }}
+      title={disabled ? 'Connect wallet to copy payment link' : undefined}
     >
-      {copied ? 'Copied' : 'Copy Direct Pay Link'}
+      {copied ? '✓ Copied' : 'Direct Pay Link'}
     </button>
   );
 }

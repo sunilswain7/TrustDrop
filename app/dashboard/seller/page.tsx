@@ -5,6 +5,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import ShareLink from '@/components/ShareLink';
 import DirectCheckoutLink from '@/components/DirectCheckoutLink';
+import { SkeletonDashboard } from '@/components/Skeleton';
+import Sunburst from '@/components/Sunburst';
+
 
 interface SellerListing {
   id: string;
@@ -53,188 +56,208 @@ export default function SellerDashboardPage() {
   useEffect(() => {
     fetch('/api/dashboard/seller')
       .then((r) => {
-        if (r.status === 401) {
-          router.push('/login');
-          return null;
-        }
+        if (r.status === 401) { router.push('/login'); return null; }
         return r.json();
       })
-      .then((d) => {
-        if (d) setData(d);
-      })
+      .then((d) => { if (d) setData(d); })
       .catch(() => setError('Could not load dashboard'))
       .finally(() => setLoading(false));
   }, [router]);
 
-  if (loading) {
-    return (
-      <div className="max-w-6xl mx-auto px-4 py-12">
-        <p className="text-zinc-500">Loading dashboard...</p>
-      </div>
-    );
-  }
+  if (loading) return <SkeletonDashboard />;
 
   if (error || !data) {
     return (
-      <div className="max-w-6xl mx-auto px-4 py-12">
-        <p className="text-red-400">{error || 'No data'}</p>
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16 text-center">
+        <div
+          className="inline-block border-2 border-[var(--ink)] bg-[var(--accent-coral)] text-white px-6 py-4 font-bold uppercase text-sm"
+          style={{ fontFamily: 'var(--font-display)', boxShadow: '4px 4px 0 0 var(--shadow-hard)' }}
+        >
+          {error || 'No data'}
+        </div>
       </div>
     );
   }
 
   const active = data.listings.filter((l) => l.status === 'ACTIVE');
-  const sold = data.listings.filter((l) => l.status === 'SOLD');
+  const sold   = data.listings.filter((l) => l.status === 'SOLD');
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-10">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">Seller Dashboard</h1>
-          <p className="text-sm text-zinc-500 mt-1">
-            {data.user.display_name || 'Anon'} ·{' '}
-            <span className="font-mono">
-              {data.user.locus_wallet_address.slice(0, 6)}...{data.user.locus_wallet_address.slice(-4)}
-            </span>
-          </p>
+    <div className="bg-[var(--bg-cream)] min-h-screen">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10">
+
+        {/* Page header */}
+        <div className="flex items-start sm:items-center justify-between gap-4 mb-10 flex-wrap">
+          <div className="relative">
+            <Sunburst color="var(--accent-yellow)" size={40} rotation={10} className="absolute -top-4 -right-8 opacity-60 hidden sm:block" />
+            <p className="label-uppercase mb-1">Your store</p>
+            <h1
+              className="text-3xl sm:text-4xl text-[var(--ink)]"
+              style={{ fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}
+            >
+              SELLER DASHBOARD
+            </h1>
+            <p className="text-sm text-[var(--ink-soft)] mt-1 font-medium">
+              {data.user.display_name || 'Anon'} ·{' '}
+              <span className="font-mono">{data.user.locus_wallet_address.slice(0, 6)}…{data.user.locus_wallet_address.slice(-4)}</span>
+            </p>
+          </div>
+          <Link href="/sell" className="btn-primary shrink-0">
+            + New Listing
+          </Link>
         </div>
-        <Link
-          href="/sell"
-          className="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition"
-        >
-          New Listing
-        </Link>
-      </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-10">
-        <StatCard label="Trust Score" value={data.user.trust_score} accent="emerald" />
-        <StatCard label="Total Sales" value={data.earnings.totalSales} accent="blue" />
-        <StatCard
-          label="Total Earned"
-          value={`$${data.earnings.totalEarned.toFixed(2)}`}
-          accent="emerald"
-        />
-        <StatCard label="Active Listings" value={active.length} accent="zinc" />
-      </div>
+        {/* Stats */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+          <StatCard label="Trust Score"      value={data.user.trust_score}                     accent="green" />
+          <StatCard label="Total Sales"      value={data.earnings.totalSales}                  accent="blue" />
+          <StatCard label="Total Earned"     value={`$${data.earnings.totalEarned.toFixed(2)}`} accent="green" />
+          <StatCard label="Active Listings"  value={active.length}                              accent="yellow" />
+        </div>
 
-      {/* Active listings */}
-      <Section title={`Active Listings (${active.length})`}>
-        {active.length === 0 ? (
-          <Empty hint="Nothing live. Create a listing to start earning." />
-        ) : (
-          <div className="grid gap-3">
-            {active.map((l) => (
-              <ListingRow key={l.id} listing={l} />
-            ))}
-          </div>
-        )}
-      </Section>
+        <div className="h-px my-2" style={{ background: 'linear-gradient(to right, transparent, var(--ink) 15%, var(--ink) 85%, transparent)', opacity: 0.3 }} />
 
-      {/* Sold listings */}
-      <Section title={`Sold (${sold.length})`}>
-        {sold.length === 0 ? (
-          <Empty hint="No sales yet." />
-        ) : (
-          <div className="grid gap-3">
-            {sold.map((l) => (
-              <ListingRow key={l.id} listing={l} />
-            ))}
-          </div>
-        )}
-      </Section>
+        {/* Active listings */}
+        <div className="mt-10 mb-10">
+          <h2
+            className="text-xl sm:text-2xl text-[var(--ink)] mb-5"
+            style={{ fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}
+          >
+            ACTIVE LISTINGS ({active.length})
+          </h2>
+          {active.length === 0 ? (
+            <EmptyState hint="Nothing live. Create a listing to start earning." />
+          ) : (
+            <div className="space-y-3">
+              {active.map((l) => <ListingRow key={l.id} listing={l} />)}
+            </div>
+          )}
+        </div>
 
-      {/* Recent sales (tx proofs) */}
-      <Section title="Recent Sales (on-chain)">
-        {data.recentSales.length === 0 ? (
-          <Empty hint="No verified sales yet." />
-        ) : (
-          <div className="overflow-x-auto rounded-xl border border-zinc-800">
-            <table className="w-full text-sm">
-              <thead className="bg-zinc-900/50 text-zinc-400 text-xs uppercase">
-                <tr>
-                  <th className="text-left px-4 py-3">Item</th>
-                  <th className="text-left px-4 py-3">Price</th>
-                  <th className="text-left px-4 py-3">Buyer</th>
-                  <th className="text-left px-4 py-3">Detected</th>
-                  <th className="text-left px-4 py-3">Tx</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.recentSales.map((s) => (
-                  <tr key={s.id} className="border-t border-zinc-800">
-                    <td className="px-4 py-3 text-white">{s.title}</td>
-                    <td className="px-4 py-3 text-emerald-400">
-                      ${parseFloat(s.price_usdc).toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-zinc-400">
-                      {s.payer_address
-                        ? `${s.payer_address.slice(0, 6)}...${s.payer_address.slice(-4)}`
-                        : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-zinc-500">
-                      {s.detection_source || '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      {s.payment_tx_hash ? (
-                        <a
-                          href={`https://basescan.org/tx/${s.payment_tx_hash}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-emerald-400 hover:text-emerald-300 text-xs underline"
-                        >
-                          BaseScan
-                        </a>
-                      ) : (
-                        <span className="text-zinc-600 text-xs">—</span>
-                      )}
-                    </td>
+        <div className="h-px my-2" style={{ background: 'linear-gradient(to right, transparent, var(--ink) 15%, var(--ink) 85%, transparent)', opacity: 0.3 }} />
+
+        {/* Sold listings */}
+        <div className="mt-10 mb-10">
+          <h2
+            className="text-xl sm:text-2xl text-[var(--ink)] mb-5"
+            style={{ fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}
+          >
+            SOLD ({sold.length})
+          </h2>
+          {sold.length === 0 ? (
+            <EmptyState hint="No sales yet." />
+          ) : (
+            <div className="space-y-3">
+              {sold.map((l) => <ListingRow key={l.id} listing={l} />)}
+            </div>
+          )}
+        </div>
+
+        <hr className="border-t-2 border-dashed border-[var(--ink)] opacity-20 my-2" />
+
+        {/* Recent sales table */}
+        <div className="mt-10">
+          <h2
+            className="text-xl sm:text-2xl text-[var(--ink)] mb-5"
+            style={{ fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}
+          >
+            RECENT SALES (ON-CHAIN)
+          </h2>
+          {data.recentSales.length === 0 ? (
+            <EmptyState hint="No verified sales yet." />
+          ) : (
+            <div
+              className="border-2 border-[var(--ink)] overflow-x-auto bg-[var(--bg-cream-alt)]"
+              style={{ boxShadow: '4px 4px 0 0 var(--shadow-hard)' }}
+            >
+              <table className="w-full text-sm min-w-[520px]">
+                <thead className="border-b-2 border-[var(--ink)] bg-[var(--accent-yellow)]">
+                  <tr>
+                    {['Item', 'Price', 'Buyer', 'Detected', 'Tx'].map((h) => (
+                      <th
+                        key={h}
+                        className="text-left px-4 py-3 text-[11px] uppercase tracking-widest font-bold text-[var(--ink)]"
+                        style={{ fontFamily: 'var(--font-display)' }}
+                      >
+                        {h}
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Section>
+                </thead>
+                <tbody>
+                  {data.recentSales.map((s, i) => (
+                    <tr
+                      key={s.id}
+                      className="border-t-2 border-[var(--ink)]"
+                      style={{ background: i % 2 === 0 ? 'var(--bg-cream-alt)' : 'var(--bg-cream)' }}
+                    >
+                      <td className="px-4 py-3 text-[var(--ink)] font-bold text-[13px] uppercase" style={{ fontFamily: 'var(--font-display)' }}>
+                        {s.title}
+                      </td>
+                      <td className="px-4 py-3 text-[var(--accent-green)] font-bold text-[13px]" style={{ fontFamily: 'var(--font-display)' }}>
+                        ${parseFloat(s.price_usdc).toFixed(2)}
+                      </td>
+                      <td className="px-4 py-3 font-mono text-[12px] text-[var(--ink-soft)]">
+                        {s.payer_address ? `${s.payer_address.slice(0, 6)}…${s.payer_address.slice(-4)}` : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-[12px] text-[var(--ink-soft)] font-medium">
+                        {s.detection_source || '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        {s.payment_tx_hash ? (
+                          <a
+                            href={`https://basescan.org/tx/${s.payment_tx_hash}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[11px] font-bold uppercase tracking-wide text-[var(--accent-green)] hover:text-[var(--accent-green-dk)] underline underline-offset-2"
+                            style={{ fontFamily: 'var(--font-display)' }}
+                          >
+                            BaseScan
+                          </a>
+                        ) : (
+                          <span className="text-[var(--ink-soft)] text-[12px]">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+      </div>
     </div>
   );
 }
 
-function StatCard({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: string | number;
-  accent: 'emerald' | 'blue' | 'zinc';
-}) {
-  const color =
-    accent === 'emerald'
-      ? 'text-emerald-400'
-      : accent === 'blue'
-      ? 'text-blue-400'
-      : 'text-zinc-200';
+function StatCard({ label, value, accent }: { label: string; value: string | number; accent: 'green' | 'blue' | 'yellow' }) {
+  const bg = accent === 'green' ? 'var(--accent-green)' : accent === 'blue' ? 'var(--accent-blue)' : 'var(--accent-yellow)';
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-      <p className="text-xs text-zinc-500 uppercase tracking-wide">{label}</p>
-      <p className={`text-2xl font-bold mt-1 ${color}`}>{value}</p>
+    <div className="card-retro-static p-5">
+      <p className="label-uppercase mb-2">{label}</p>
+      <p
+        className="text-2xl sm:text-3xl font-bold text-[var(--ink)]"
+        style={{ fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}
+      >
+        {value}
+      </p>
+      <div className="mt-3 h-1.5 border border-[var(--ink)]" style={{ background: bg }} />
     </div>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function EmptyState({ hint }: { hint: string }) {
   return (
-    <section className="mb-10">
-      <h2 className="text-lg font-semibold mb-3 text-zinc-200">{title}</h2>
-      {children}
-    </section>
-  );
-}
-
-function Empty({ hint }: { hint: string }) {
-  return (
-    <div className="border border-dashed border-zinc-800 rounded-xl py-10 text-center">
-      <p className="text-sm text-zinc-500">{hint}</p>
+    <div
+      className="border-2 border-dashed border-[var(--ink)] bg-[var(--bg-cream-alt)] py-12 text-center"
+    >
+      <p
+        className="text-[var(--ink-soft)] font-bold uppercase tracking-wide text-sm"
+        style={{ fontFamily: 'var(--font-display)' }}
+      >
+        {hint}
+      </p>
     </div>
   );
 }
@@ -242,55 +265,77 @@ function Empty({ hint }: { hint: string }) {
 function ListingRow({ listing }: { listing: SellerListing }) {
   const isSold = listing.status === 'SOLD';
   return (
-    <div className="flex items-center gap-4 bg-zinc-900 border border-zinc-800 rounded-xl p-3">
-      <div className="w-16 h-16 bg-zinc-800 rounded-lg overflow-hidden shrink-0">
+    <div
+      className="flex items-center gap-4 bg-[var(--bg-cream-alt)] border-2 border-[var(--ink)] p-3 transition-all duration-150"
+      style={{ boxShadow: '3px 3px 0 0 var(--shadow-hard)' }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLDivElement).style.transform = 'translate(2px,2px)';
+        (e.currentTarget as HTMLDivElement).style.boxShadow = '1px 1px 0 0 var(--shadow-hard)';
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLDivElement).style.transform = '';
+        (e.currentTarget as HTMLDivElement).style.boxShadow = '3px 3px 0 0 var(--shadow-hard)';
+      }}
+    >
+      {/* Thumbnail */}
+      <div className="w-14 h-14 sm:w-16 sm:h-16 bg-[#e8e0cc] border-2 border-[var(--ink)] overflow-hidden shrink-0">
         {listing.preview_url && listing.preview_url !== 'pending' ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={listing.preview_url} alt={listing.title} className="w-full h-full object-cover" />
         ) : null}
       </div>
+
+      {/* Info */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Link
             href={`/listing/${listing.id}`}
-            className="text-white font-medium truncate hover:text-emerald-400 transition"
+            className="text-[var(--ink)] font-bold text-sm uppercase truncate hover:text-[var(--accent-green)] transition-colors"
+            style={{ fontFamily: 'var(--font-display)' }}
           >
             {listing.title}
           </Link>
           <span
-            className={`text-xs px-2 py-0.5 rounded ${
-              isSold
-                ? 'bg-zinc-800 text-zinc-400'
-                : 'bg-emerald-400/10 text-emerald-400'
-            }`}
+            className="text-[10px] border border-[var(--ink)] px-2 py-0.5 font-bold uppercase shrink-0"
+            style={{
+              fontFamily: 'var(--font-display)',
+              background: isSold ? 'var(--bg-cream)' : 'var(--accent-green)',
+              color: 'var(--ink)',
+            }}
           >
             {listing.status}
           </span>
-          <span className="text-xs text-zinc-600">v{listing.preview_version}</span>
+          <span
+            className="text-[10px] text-[var(--ink-soft)] font-bold uppercase shrink-0"
+            style={{ fontFamily: 'var(--font-display)' }}
+          >
+            v{listing.preview_version}
+          </span>
         </div>
-        <p className="text-xs text-zinc-500 mt-0.5">
-          {listing.category} · .{listing.file_type} · {listing.sales_count} sale
-          {listing.sales_count === '1' ? '' : 's'}
+        <p className="text-[11px] font-medium text-[var(--ink-soft)] mt-0.5 uppercase tracking-wide" style={{ fontFamily: 'var(--font-display)' }}>
+          {listing.category} · .{listing.file_type} · {listing.sales_count} sale{listing.sales_count === '1' ? '' : 's'}
         </p>
       </div>
-      <div className="text-right shrink-0 space-y-1.5">
-        <p className="text-emerald-400 font-bold">${parseFloat(listing.price_usdc).toFixed(2)}</p>
+
+      {/* Actions */}
+      <div className="text-right shrink-0 space-y-2">
+        <p
+          className="font-bold text-[var(--accent-green)] text-sm"
+          style={{ fontFamily: 'var(--font-display)' }}
+        >
+          ${parseFloat(listing.price_usdc).toFixed(2)}
+        </p>
         <Link
           href={`/listing/${listing.id}/room`}
-          className="block text-xs text-zinc-400 hover:text-white transition"
+          className="block text-[11px] font-bold text-[var(--ink-soft)] hover:text-[var(--accent-green)] transition-colors uppercase"
+          style={{ fontFamily: 'var(--font-display)' }}
         >
           Open Room →
         </Link>
         {!isSold && (
-          <div className="flex gap-1.5 justify-end">
-            <ShareLink
-              listingId={listing.id}
-              className="text-xs bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 px-2 py-1 rounded transition"
-            />
-            <DirectCheckoutLink
-              checkoutUrl={listing.checkout_url}
-              className="text-xs bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 text-violet-300 px-2 py-1 rounded transition"
-            />
+          <div className="flex gap-2 justify-end mt-1">
+            <ShareLink listingId={listing.id} />
+            <DirectCheckoutLink checkoutUrl={listing.checkout_url} />
           </div>
         )}
       </div>

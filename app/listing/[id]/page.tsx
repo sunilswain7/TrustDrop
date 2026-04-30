@@ -7,6 +7,8 @@ import LocusCheckoutButton from '@/components/LocusCheckoutButton';
 import TxProof from '@/components/TxProof';
 import ShareLink from '@/components/ShareLink';
 import DirectCheckoutLink from '@/components/DirectCheckoutLink';
+import { SkeletonListingPage } from '@/components/Skeleton';
+import Sunburst from '@/components/Sunburst';
 import type { CheckoutSuccessData } from '@withlocus/checkout-react';
 
 interface Listing {
@@ -53,6 +55,7 @@ export default function ListingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [txHash, setTxHash] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const fetchListing = useCallback(() => {
     fetch(`/api/listings/${id}`)
@@ -70,13 +73,16 @@ export default function ListingPage() {
   }, [id]);
 
   useEffect(() => {
-    fetchListing();
-  }, [fetchListing]);
+    fetch('/api/auth')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => setIsAuthenticated(!!data?.user))
+      .catch(() => setIsAuthenticated(false));
+  }, []);
 
-  // Poll for download token after payment
+  useEffect(() => { fetchListing(); }, [fetchListing]);
+
   useEffect(() => {
     if (!justPaid || !listing || listing.status !== 'ACTIVE') return;
-
     const interval = setInterval(async () => {
       const res = await fetch(`/api/listings/${id}`);
       const data = await res.json();
@@ -86,13 +92,11 @@ export default function ListingPage() {
         clearInterval(interval);
       }
     }, 3000);
-
     return () => clearInterval(interval);
   }, [justPaid, listing, id]);
 
   const handlePaymentSuccess = useCallback((data: CheckoutSuccessData) => {
     setTxHash(data.txHash);
-    // Start polling for download token
     const interval = setInterval(async () => {
       const res = await fetch(`/api/listings/${id}`);
       const result = await res.json();
@@ -102,26 +106,20 @@ export default function ListingPage() {
         clearInterval(interval);
       }
     }, 3000);
-
-    setTimeout(() => clearInterval(interval), 120000); // stop after 2 min
+    setTimeout(() => clearInterval(interval), 120000);
   }, [id]);
 
-  if (loading) {
-    return (
-      <div className="max-w-4xl mx-auto px-4 py-12">
-        <div className="animate-pulse space-y-4">
-          <div className="h-64 bg-zinc-800 rounded-xl" />
-          <div className="h-8 bg-zinc-800 rounded w-1/2" />
-          <div className="h-4 bg-zinc-800 rounded w-3/4" />
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <SkeletonListingPage />;
 
   if (error || !listing) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-12 text-center">
-        <p className="text-red-400">{error || 'Listing not found'}</p>
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-16 text-center">
+        <div
+          className="inline-block border-2 border-[var(--ink)] bg-[var(--accent-coral)] text-white px-6 py-4 font-bold uppercase text-sm"
+          style={{ fontFamily: 'var(--font-display)', boxShadow: '4px 4px 0 0 var(--shadow-hard)' }}
+        >
+          {error || 'Listing not found'}
+        </div>
       </div>
     );
   }
@@ -129,11 +127,28 @@ export default function ListingPage() {
   const displayTxHash = txHash || purchase?.payment_tx_hash;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-12">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10 sm:py-14 relative">
+      <Sunburst color="var(--accent-yellow)" size={60} rotation={15} className="absolute top-6 right-2 opacity-30 hidden lg:block" />
+
+      {/* Breadcrumb */}
+      <div className="mb-6">
+        <Link
+          href="/#browse"
+          className="text-[12px] font-semibold text-[var(--ink-soft)] hover:text-[var(--accent-green)] transition-colors uppercase tracking-wide"
+          style={{ fontFamily: 'var(--font-display)' }}
+        >
+          ← Back to Browse
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12">
+
         {/* Preview */}
         <div>
-          <div className="relative rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800">
+          <div
+            className="border-2 border-[var(--ink)] overflow-hidden relative bg-[#e8e0cc]"
+            style={{ boxShadow: '6px 6px 0 0 var(--shadow-hard)' }}
+          >
             {listing.preview_url && listing.preview_url !== 'pending' ? (
               <img
                 src={listing.preview_url}
@@ -141,119 +156,166 @@ export default function ListingPage() {
                 className="w-full aspect-square object-cover"
               />
             ) : (
-              <div className="w-full aspect-square flex items-center justify-center text-zinc-600">
-                Preview generating...
+              <div className="w-full aspect-square flex items-center justify-center">
+                <span
+                  className="text-[12px] text-[var(--ink-soft)] font-bold uppercase tracking-wide"
+                  style={{ fontFamily: 'var(--font-display)' }}
+                >
+                  Preview generating…
+                </span>
               </div>
             )}
-            <div className="absolute top-3 right-3 bg-zinc-900/80 text-xs text-zinc-400 px-2 py-1 rounded">
+            <div
+              className="absolute top-3 right-3 border-2 border-[var(--ink)] text-[10px] font-bold px-2 py-0.5 uppercase"
+              style={{ background: 'var(--accent-yellow)', fontFamily: 'var(--font-display)', boxShadow: '2px 2px 0 0 var(--shadow-hard)' }}
+            >
               v{listing.preview_version}
             </div>
           </div>
         </div>
 
         {/* Details */}
-        <div className="space-y-6">
+        <div className="space-y-5">
+
+          {/* Category + Title */}
           <div>
-            <span className="text-xs uppercase tracking-wider text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded">
+            <span
+              className="inline-block border-2 border-[var(--ink)] text-[10px] font-bold px-3 py-1 uppercase tracking-wider mb-3"
+              style={{ background: 'var(--accent-yellow)', fontFamily: 'var(--font-display)', boxShadow: '2px 2px 0 0 var(--shadow-hard)' }}
+            >
               {listing.category}
             </span>
-            <h1 className="text-3xl font-bold mt-3">{listing.title}</h1>
+            <h1
+              className="text-2xl sm:text-3xl text-[var(--ink)] leading-tight"
+              style={{ fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}
+            >
+              {listing.title.toUpperCase()}
+            </h1>
           </div>
 
-          <p className="text-zinc-400 leading-relaxed">{listing.description}</p>
+          <p className="text-sm text-[var(--ink-soft)] leading-relaxed font-medium">{listing.description}</p>
 
+          {/* Price */}
           <div className="flex items-baseline gap-2">
-            <span className="text-4xl font-bold text-emerald-400">
+            <span
+              className="text-4xl font-bold text-[var(--accent-green)]"
+              style={{ fontFamily: 'var(--font-display)' }}
+            >
               ${parseFloat(listing.price_usdc).toFixed(2)}
             </span>
-            <span className="text-zinc-500">USDC</span>
+            <span
+              className="text-[12px] font-bold text-[var(--ink-soft)] uppercase tracking-wide"
+              style={{ fontFamily: 'var(--font-display)' }}
+            >
+              USDC
+            </span>
           </div>
 
           {/* Seller info */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-zinc-400">Seller</p>
-                <p className="text-white font-medium">
+          <div className="card-retro-static p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="label-uppercase" style={{ marginBottom: 3 }}>Seller</p>
+                <p className="text-[var(--ink)] font-bold text-sm uppercase" style={{ fontFamily: 'var(--font-display)' }}>
                   {listing.seller_name || 'Anonymous'}
                 </p>
-                <p className="text-xs text-zinc-600 font-mono mt-1">
-                  {listing.seller_wallet.slice(0, 6)}...{listing.seller_wallet.slice(-4)}
+                <p className="text-[11px] text-[var(--ink-soft)] font-mono mt-0.5 truncate">
+                  {listing.seller_wallet.slice(0, 6)}…{listing.seller_wallet.slice(-4)}
                 </p>
               </div>
-              <div className="text-right">
-                <p className="text-sm text-zinc-400">Trust Score</p>
-                <p className="text-2xl font-bold text-emerald-400">{listing.seller_trust}</p>
+              <div className="text-right shrink-0">
+                <p className="label-uppercase" style={{ marginBottom: 3 }}>Trust Score</p>
+                <p
+                  className="text-3xl font-bold text-[var(--accent-green)]"
+                  style={{ fontFamily: 'var(--font-display)' }}
+                >
+                  {listing.seller_trust}
+                </p>
               </div>
             </div>
           </div>
 
           {/* File info */}
-          <div className="text-sm text-zinc-500 space-y-1">
-            <p>File type: .{listing.file_type}</p>
-            <p>Status: {listing.status}</p>
-            {purchase?.detection_source && (
-              <p>Verified via: {purchase.detection_source}</p>
-            )}
+          <div className="border-t-2 border-[var(--ink)] pt-4 space-y-1">
+            {[
+              { label: 'File type', value: `.${listing.file_type}` },
+              { label: 'Status', value: listing.status },
+              ...(purchase?.detection_source ? [{ label: 'Verified via', value: purchase.detection_source }] : []),
+            ].map((row) => (
+              <div key={row.label} className="flex items-center gap-2 text-[12px]">
+                <span className="text-[var(--ink-soft)] font-medium uppercase tracking-wide" style={{ fontFamily: 'var(--font-display)', fontSize: '10px' }}>
+                  {row.label}:
+                </span>
+                <span className="text-[var(--ink)] font-bold">{row.value}</span>
+              </div>
+            ))}
           </div>
 
-          {/* Itemized breakdown when buyer has commitments on this listing */}
+          {/* Itemized breakdown */}
           {breakdown && breakdown.commitments.length > 0 && !purchase && (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 text-sm space-y-2">
-              <p className="text-zinc-400 font-medium">Your itemized total</p>
-              <div className="flex justify-between">
-                <span className="text-zinc-400">{listing.title} (original)</span>
-                <span className="text-zinc-300">${breakdown.originalPrice}</span>
+            <div className="card-retro-static p-4 space-y-3 text-sm">
+              <p className="label-uppercase">Itemized Total</p>
+              <div className="flex justify-between text-[13px]">
+                <span className="text-[var(--ink-soft)]">{listing.title} (original)</span>
+                <span className="text-[var(--ink)] font-bold">${breakdown.originalPrice}</span>
               </div>
               {breakdown.commitments.map((c, i) => (
-                <div key={i} className="flex justify-between text-violet-300">
+                <div key={i} className="flex justify-between text-[13px] text-[var(--accent-green)]">
                   <span className="truncate pr-2" title={c.description}>
                     Commitment: {c.description.slice(0, 40)}{c.description.length > 40 ? '…' : ''}
                   </span>
                   <span>−${c.amount}</span>
                 </div>
               ))}
-              <div className="border-t border-zinc-800 pt-2 flex justify-between font-semibold">
-                <span className="text-white">Final due now</span>
-                <span className="text-emerald-400">${breakdown.finalAmount}</span>
+              <div className="border-t-2 border-[var(--ink)] pt-3 flex justify-between font-bold text-[13px]">
+                <span className="text-[var(--ink)]">Final due now</span>
+                <span className="text-[var(--accent-green)]">${breakdown.finalAmount}</span>
               </div>
-              <p className="text-xs text-zinc-600">
-                Locus receipt is configured ({'{'}<code>enabled</code>, <code>merchantName</code>{'}'}). Locus emails its own
-                receipt for the final amount; this panel is the full itemized breakdown.
-              </p>
             </div>
           )}
 
-          {/* Buy / Download section */}
+          {/* Buy / Checkout */}
           {listing.status === 'ACTIVE' && !purchase && (
             <LocusCheckoutButton
               listingId={listing.id}
               sessionId={listing.checkout_session_id}
               checkoutUrl={listing.checkout_url}
               price={breakdown?.finalAmount ?? listing.price_usdc}
+              isAuthenticated={isAuthenticated}
               onSuccess={handlePaymentSuccess}
             />
           )}
 
-          {/* Post-purchase: download */}
+          {/* Post-purchase download */}
           {purchase && (
             <div className="space-y-4">
-              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-4">
-                <p className="text-emerald-400 font-semibold">Payment Verified On-Chain</p>
-                <p className="text-sm text-zinc-400 mt-1">
-                  Dual verification passed. Your file is ready for download.
+              <div
+                className="border-2 border-[var(--ink)] bg-[var(--accent-green)] px-4 py-4"
+                style={{ boxShadow: '4px 4px 0 0 var(--shadow-hard)' }}
+              >
+                <p
+                  className="font-bold text-sm uppercase text-[var(--ink)]"
+                  style={{ fontFamily: 'var(--font-display)' }}
+                >
+                  Payment Verified On-Chain
+                </p>
+                <p className="text-[12px] text-[var(--ink)] mt-1 font-medium opacity-80">
+                  Dual verification passed. Your file is ready.
                 </p>
               </div>
 
               {!purchase.downloaded ? (
                 <a
                   href={`/api/download/${purchase.download_token}`}
-                  className="block w-full text-center bg-emerald-500 hover:bg-emerald-600 text-white font-medium py-4 rounded-lg transition text-lg"
+                  className="btn-primary w-full py-3 text-[14px]"
                 >
-                  Download Decrypted File
+                  Download Decrypted File →
                 </a>
               ) : (
-                <div className="bg-zinc-800 text-center py-4 rounded-lg text-zinc-400">
+                <div
+                  className="border-2 border-[var(--ink)] bg-[var(--bg-cream-alt)] text-center py-4 text-[var(--ink-soft)] text-sm font-bold uppercase"
+                  style={{ fontFamily: 'var(--font-display)' }}
+                >
                   File already downloaded
                 </div>
               )}
@@ -261,34 +323,39 @@ export default function ListingPage() {
               {displayTxHash && <TxProof txHash={displayTxHash} />}
 
               {new Date(purchase.download_token_expires) > new Date() && (
-                <p className="text-xs text-zinc-600 text-center">
-                  Download link expires: {new Date(purchase.download_token_expires).toLocaleString()}
+                <p className="text-[11px] text-[var(--ink-soft)] text-center font-medium">
+                  Link expires: {new Date(purchase.download_token_expires).toLocaleString()}
                 </p>
               )}
             </div>
           )}
 
+          {/* Sold (not purchased by this user) */}
           {listing.status === 'SOLD' && !purchase && (
-            <div className="bg-zinc-800 text-center py-4 rounded-lg text-zinc-400">
+            <div
+              className="border-2 border-[var(--ink)] bg-[var(--bg-cream-alt)] text-center py-4 text-[var(--ink-soft)] text-sm font-bold uppercase"
+              style={{ fontFamily: 'var(--font-display)', boxShadow: '3px 3px 0 0 var(--shadow-hard)' }}
+            >
               This item has been sold
             </div>
           )}
 
-          {/* Share / Discord links */}
+          {/* Share links */}
           {listing.status === 'ACTIVE' && (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-3 pt-4 border-t-2 border-[var(--ink)]">
               <ShareLink listingId={listing.id} />
-              <DirectCheckoutLink checkoutUrl={listing.checkout_url} />
+              <DirectCheckoutLink checkoutUrl={listing.checkout_url} disabled={!isAuthenticated} />
             </div>
           )}
 
-          {/* Improvement Room link */}
+          {/* Improvement room */}
           {listing.status === 'ACTIVE' && (
             <Link
               href={`/listing/${listing.id}/room`}
-              className="block text-center text-sm text-zinc-400 hover:text-emerald-400 transition"
+              className="block text-center text-[12px] font-bold text-[var(--ink-soft)] hover:text-[var(--accent-green)] transition-colors uppercase tracking-wide mt-1"
+              style={{ fontFamily: 'var(--font-display)' }}
             >
-              Open Improvement Room
+              Open Improvement Room →
             </Link>
           )}
         </div>

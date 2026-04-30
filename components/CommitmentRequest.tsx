@@ -94,7 +94,8 @@ export default function CommitmentRequest({
         type="button"
         disabled={disabled}
         onClick={() => setShowInput(true)}
-        className="shrink-0 text-sm bg-violet-500/10 hover:bg-violet-500/20 disabled:opacity-50 disabled:cursor-not-allowed border border-violet-500/30 text-violet-300 px-3 py-2 rounded-lg transition"
+        className="btn-secondary text-[11px] disabled:opacity-40 disabled:cursor-not-allowed"
+        style={{ padding: '6px 14px' }}
         title={`Commit ~$${estimate} to request changes`}
       >
         Request Changes
@@ -103,96 +104,93 @@ export default function CommitmentRequest({
   }
 
   return (
-    <div className="border-t border-zinc-800 p-4 bg-violet-500/5 space-y-3">
+    <div className="border-t-2 border-[var(--ink)] p-4 bg-[var(--bg-cream-alt)] space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-medium text-violet-300">Commit to request changes</p>
-          <p className="text-xs text-zinc-500 mt-0.5">
-            Pay 20% (≈ ${estimate}) to the platform. Released to seller on delivery,
-            refunded if seller doesn't deliver in 48h.
+          <p className="font-bold text-[13px] text-[var(--ink)] uppercase" style={{ fontFamily: 'var(--font-display)' }}>
+            Commit to request changes
+          </p>
+          <p className="text-[12px] text-[var(--ink-soft)] mt-1 leading-relaxed">
+            Pay 20% (≈ ${estimate}) held until delivery or refunded after 48h.
           </p>
         </div>
         <button
           type="button"
-          onClick={() => {
-            reset();
-            setShowInput(false);
-            setMessage('');
-          }}
-          className="text-xs text-zinc-500 hover:text-zinc-300"
+          onClick={() => { reset(); setShowInput(false); setMessage(''); }}
+          className="text-[11px] font-bold text-[var(--ink-soft)] hover:text-[var(--accent-coral)] transition-colors uppercase"
+          style={{ fontFamily: 'var(--font-display)' }}
         >
           Cancel
         </button>
       </div>
 
       {phase === 'idle' && (
-        <>
+        <div className="space-y-3">
           <textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             placeholder="Describe the changes you want…"
             rows={3}
-            className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:outline-none focus:border-violet-500 resize-none"
+            className="input-retro resize-none"
           />
-          {error && <p className="text-xs text-red-400">{error}</p>}
+          {error && (
+            <p className="text-[12px] text-[var(--accent-coral)] font-semibold">{error}</p>
+          )}
           <button
             type="button"
             onClick={startCommit}
             disabled={!message.trim()}
-            className="w-full bg-violet-500 hover:bg-violet-600 disabled:bg-zinc-700 disabled:cursor-not-allowed text-white text-sm font-medium py-2 rounded-lg transition"
+            className="btn-primary w-full"
           >
             Continue — Pay ${estimate} commitment
           </button>
-        </>
+        </div>
       )}
 
       {phase === 'creating' && (
-        <p className="text-sm text-zinc-400 text-center py-2">Preparing checkout…</p>
+        <p className="text-[13px] text-[var(--ink-soft)] font-semibold text-center py-2 uppercase" style={{ fontFamily: 'var(--font-display)' }}>
+          Preparing checkout…
+        </p>
       )}
 
       {phase === 'paying' && sessionId && (
-        <div className="rounded-lg overflow-hidden border border-zinc-700">
+        <div className="border-2 border-[var(--ink)] overflow-hidden bg-white" style={{ boxShadow: '3px 3px 0 0 var(--shadow-hard)' }}>
           <LocusCheckout
             sessionId={sessionId}
             mode="popup"
             onSuccess={handleSuccess}
             onCancel={reset}
-            onError={(e) => {
-              setError(e.message);
-              setPhase('error');
-            }}
+            onError={(e) => { setError(e.message); setPhase('error'); }}
             {...(checkoutUrl ? { checkoutUrl } : {})}
           />
         </div>
       )}
 
       {phase === 'confirming' && (
-        <p className="text-sm text-zinc-400 text-center py-2">
-          Verifying on-chain… (this is the same `sessionPaid()` check as the final purchase)
+        <p className="text-[13px] text-[var(--ink-soft)] font-semibold text-center py-2 uppercase" style={{ fontFamily: 'var(--font-display)' }}>
+          Verifying on-chain…
         </p>
       )}
 
       {phase === 'done' && (
-        <p className="text-sm text-emerald-400 text-center py-2">
+        <p className="text-[13px] font-bold text-[var(--accent-green)] text-center py-2 uppercase" style={{ fontFamily: 'var(--font-display)' }}>
           Commitment locked. Seller has 48h to deliver.
         </p>
       )}
 
       {phase === 'error' && (
-        <>
-          <p className="text-sm text-red-400">{error}</p>
-          <button
-            type="button"
-            onClick={reset}
-            className="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-sm py-2 rounded-lg"
-          >
+        <div className="space-y-3">
+          <p className="text-[12px] text-[var(--accent-coral)] font-semibold text-center">{error}</p>
+          <button type="button" onClick={reset} className="btn-secondary w-full">
             Try again
           </button>
-        </>
+        </div>
       )}
 
       {amount && phase !== 'idle' && (
-        <p className="text-xs text-zinc-600 text-center">Amount: ${amount} USDC</p>
+        <p className="text-[11px] text-[var(--ink-soft)] font-semibold text-center uppercase tracking-wide" style={{ fontFamily: 'var(--font-display)' }}>
+          Amount: ${amount} USDC
+        </p>
       )}
     </div>
   );
