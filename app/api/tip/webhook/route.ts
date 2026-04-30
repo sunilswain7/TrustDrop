@@ -20,12 +20,15 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  if (payload.event !== 'checkout.session.completed') {
+  console.log(`[TIP-WEBHOOK] Received event: ${payload.event}`);
+
+  if (payload.event !== 'checkout.session.paid') {
+    console.log(`[TIP-WEBHOOK] Ignoring event: ${payload.event}`);
     return NextResponse.json({ ok: true });
   }
 
   const sessionId = payload.data.sessionId;
-  console.log(`[TIP-WEBHOOK] Received tip payment for session ${sessionId}`);
+  console.log(`[TIP-WEBHOOK] Processing tip payment for session ${sessionId}`);
 
   try {
     const sessionResp = await getCheckoutSession(sessionId);
@@ -36,6 +39,7 @@ export async function POST(req: NextRequest) {
     };
 
     const meta = session.metadata || {};
+    console.log(`[TIP-WEBHOOK] Metadata:`, JSON.stringify(meta));
     if (meta.type !== 'tip' || !meta.sellerWallet) {
       console.warn('[TIP-WEBHOOK] Not a tip session or missing sellerWallet');
       return NextResponse.json({ ok: true });
