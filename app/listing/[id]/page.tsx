@@ -399,13 +399,13 @@ export default function ListingPage() {
 
           {/* Improvement room */}
           {listing.status === 'ACTIVE' && (
-            <Link
+            <a
               href={`/listing/${listing.id}/room`}
               className="block text-center text-[12px] font-bold text-[var(--ink-soft)] hover:text-[var(--accent-green)] transition-colors uppercase tracking-wide mt-1"
               style={{ fontFamily: 'var(--font-display)' }}
             >
               Open Improvement Room →
-            </Link>
+            </a>
           )}
         </div>
       </div>
