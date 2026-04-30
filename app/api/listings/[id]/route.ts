@@ -11,7 +11,7 @@ export async function GET(
 
   const result = await query(
     `SELECT l.*, u.display_name as seller_name, u.trust_score as seller_trust,
-            u.locus_wallet_address as seller_wallet
+            u.locus_wallet_address as seller_wallet, u.email as seller_email
      FROM listings l
      JOIN users u ON l.seller_id = u.id
      WHERE l.id = $1`,

@@ -28,6 +28,7 @@ interface Listing {
   seller_name: string | null;
   seller_trust: number;
   seller_wallet: string;
+  seller_email: string | null;
 }
 
 interface PurchaseInfo {
@@ -319,6 +320,7 @@ export default function ListingPage() {
               listingId={listing.id}
               sellerWallet={listing.seller_wallet}
               sellerName={listing.seller_name}
+              sellerEmail={listing.seller_email}
             />
           )}
 

@@ -121,4 +121,25 @@ export function verifyWebhookSignature(
   );
 }
 
+// Send USDC to an email address via Locus escrow.
+// Recipient gets a claim link; unclaimed funds return after expiry.
+export async function sendEmailPayment(params: {
+  email: string;
+  amount: string;
+  memo?: string;
+  expiresInDays?: number;
+}): Promise<{ escrowId: string; expiresAt: string }> {
+  const res = await locusRequest('/pay/send-email', {
+    method: 'POST',
+    body: JSON.stringify({
+      email: params.email,
+      amount: parseFloat(params.amount),
+      memo: params.memo || 'TrustDrop payout',
+      ...(params.expiresInDays ? { expires_in_days: params.expiresInDays } : {}),
+    }),
+  });
+  const data = res?.data || res;
+  return { escrowId: data.escrow_id, expiresAt: data.expires_at };
+}
+
 export type { CheckoutWebhookPayload };
