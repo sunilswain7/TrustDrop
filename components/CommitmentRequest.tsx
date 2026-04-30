@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { LocusCheckout, type CheckoutSuccessData } from '@withlocus/checkout-react';
 
 interface CommitmentRequestProps {
@@ -25,8 +25,20 @@ export default function CommitmentRequest({
   const [amount, setAmount] = useState<string>('');
   const [error, setError] = useState<string>('');
   const [showInput, setShowInput] = useState(false);
+  const [confirmRetries, setConfirmRetries] = useState(0);
 
   const estimate = (parseFloat(currentPrice) * 0.2).toFixed(2);
+
+  // Auto-dismiss the "done" state after 3 seconds
+  useEffect(() => {
+    if (phase === 'done') {
+      const t = setTimeout(() => {
+        setShowInput(false);
+        setPhase('idle');
+      }, 3000);
+      return () => clearTimeout(t);
+    }
+  }, [phase]);
 
   async function startCommit() {
     setError('');
@@ -57,27 +69,41 @@ export default function CommitmentRequest({
     }
   }
 
-  async function handleSuccess(data: CheckoutSuccessData) {
-    setPhase('confirming');
+  // Retries up to 5 times on 409 (payment not yet on-chain)
+  const confirmPayment = useCallback(async (sid: string, txHash?: string, retry = 0): Promise<boolean> => {
     try {
       const res = await fetch(`/api/room/${listingId}/commit/confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, txHash: data.txHash }),
+        body: JSON.stringify({ sessionId: sid, txHash }),
       });
       const result = await res.json();
+      if (res.status === 409 && retry < 5) {
+        setConfirmRetries(retry + 1);
+        await new Promise((r) => setTimeout(r, 3000));
+        return confirmPayment(sid, txHash, retry + 1);
+      }
       if (!res.ok) {
         setError(result.error || 'Confirmation failed');
         setPhase('error');
-        return;
+        return false;
       }
-      setPhase('done');
-      setMessage('');
-      setShowInput(false);
-      onConfirmed?.();
+      return true;
     } catch {
       setError('Confirmation network error');
       setPhase('error');
+      return false;
+    }
+  }, [listingId]);
+
+  async function handleSuccess(data: CheckoutSuccessData) {
+    setPhase('confirming');
+    setConfirmRetries(0);
+    const ok = await confirmPayment(sessionId!, data.txHash);
+    if (ok) {
+      setPhase('done');
+      setMessage('');
+      onConfirmed?.();
     }
   }
 
@@ -86,6 +112,7 @@ export default function CommitmentRequest({
     setSessionId(null);
     setAmount('');
     setError('');
+    setConfirmRetries(0);
   }
 
   if (!showInput && phase === 'idle') {
@@ -114,14 +141,17 @@ export default function CommitmentRequest({
             Pay 20% (≈ ${estimate}) held until delivery or refunded after 48h.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => { reset(); setShowInput(false); setMessage(''); }}
-          className="text-[11px] font-bold text-[var(--ink-soft)] hover:text-[var(--accent-coral)] transition-colors uppercase"
-          style={{ fontFamily: 'var(--font-display)' }}
-        >
-          Cancel
-        </button>
+        {/* Hide cancel during confirming/done — can't interrupt on-chain verification */}
+        {phase !== 'confirming' && phase !== 'done' && (
+          <button
+            type="button"
+            onClick={() => { reset(); setShowInput(false); setMessage(''); }}
+            className="text-[11px] font-bold text-[var(--ink-soft)] hover:text-[var(--accent-coral)] transition-colors uppercase shrink-0"
+            style={{ fontFamily: 'var(--font-display)' }}
+          >
+            Cancel
+          </button>
+        )}
       </div>
 
       {phase === 'idle' && (
@@ -154,10 +184,10 @@ export default function CommitmentRequest({
       )}
 
       {phase === 'paying' && sessionId && (
-        <div className="border-2 border-[var(--ink)] overflow-hidden bg-white" style={{ boxShadow: '3px 3px 0 0 var(--shadow-hard)' }}>
+        <div className="border-2 border-[var(--ink)] overflow-hidden bg-white max-h-[350px] overflow-y-auto" style={{ boxShadow: '3px 3px 0 0 var(--shadow-hard)' }}>
           <LocusCheckout
             sessionId={sessionId}
-            mode="popup"
+            mode="embedded"
             onSuccess={handleSuccess}
             onCancel={reset}
             onError={(e) => { setError(e.message); setPhase('error'); }}
@@ -167,15 +197,34 @@ export default function CommitmentRequest({
       )}
 
       {phase === 'confirming' && (
-        <p className="text-[13px] text-[var(--ink-soft)] font-semibold text-center py-2 uppercase" style={{ fontFamily: 'var(--font-display)' }}>
-          Verifying on-chain…
-        </p>
+        <div className="text-center py-4 space-y-2">
+          <p className="text-[13px] text-[var(--ink-soft)] font-semibold uppercase" style={{ fontFamily: 'var(--font-display)' }}>
+            Verifying on-chain…{confirmRetries > 0 ? ` (attempt ${confirmRetries + 1}/6)` : ''}
+          </p>
+          <div className="flex justify-center gap-1">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="w-1.5 h-1.5 rounded-full bg-[var(--accent-green)]"
+                style={{ animation: `skeleton-pulse 1s ease-in-out ${i * 0.2}s infinite` }}
+              />
+            ))}
+          </div>
+        </div>
       )}
 
       {phase === 'done' && (
-        <p className="text-[13px] font-bold text-[var(--accent-green)] text-center py-2 uppercase" style={{ fontFamily: 'var(--font-display)' }}>
-          Commitment locked. Seller has 48h to deliver.
-        </p>
+        <div
+          className="border-2 border-[var(--ink)] bg-[var(--accent-green)] px-4 py-3 text-center"
+          style={{ boxShadow: '3px 3px 0 0 var(--shadow-hard)' }}
+        >
+          <p className="text-[13px] font-bold text-[var(--ink)] uppercase" style={{ fontFamily: 'var(--font-display)' }}>
+            Commitment locked!
+          </p>
+          <p className="text-[11px] text-[var(--ink)] mt-1 font-medium opacity-80">
+            Seller has been notified. 48h timer started.
+          </p>
+        </div>
       )}
 
       {phase === 'error' && (

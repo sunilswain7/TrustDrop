@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 
 interface User {
   id: string;
@@ -37,7 +37,7 @@ export default function Navbar() {
     setMobileOpen(false);
   }, [pathname]);
 
-  async function handleDisconnect() {
+  const handleDisconnect = useCallback(async () => {
     setDisconnecting(true);
     try {
       await fetch('/api/auth', { method: 'DELETE' });
@@ -51,7 +51,7 @@ export default function Navbar() {
     } finally {
       setDisconnecting(false);
     }
-  }
+  }, [router]);
 
   const truncatedWallet = user
     ? `${user.locus_wallet_address.slice(0, 6)}...${user.locus_wallet_address.slice(-4)}`

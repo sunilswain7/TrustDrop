@@ -47,13 +47,35 @@ interface ImprovementRoomProps {
   isSeller: boolean;
 }
 
+// Shows h/m/s countdown — updated every second when commitment is HELD
 function formatRemaining(deadlineIso: string): string {
   const ms = new Date(deadlineIso).getTime() - Date.now();
   if (ms <= 0) return 'expired';
-  const totalMin = Math.floor(ms / 60000);
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+// Upload a file to Supabase via a server-issued signed URL
+async function uploadToSupabase(file: File, fileType?: 'preview'): Promise<string> {
+  const res = await fetch('/api/upload/signed-url', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fileName: file.name, fileType }),
+  });
+  if (!res.ok) throw new Error('Failed to get upload URL');
+  const { signedUrl, path } = await res.json();
+  const uploadRes = await fetch(signedUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-upsert': 'true' },
+    body: file,
+  });
+  if (!uploadRes.ok) throw new Error('Failed to upload file');
+  return path;
 }
 
 export default function ImprovementRoom({
@@ -104,20 +126,32 @@ export default function ImprovementRoom({
     fetch(`/api/room/${listingId}/check-deadline`, { method: 'POST' }).catch(() => {});
   }, [fetchMessages, listingId]);
 
+  // 1-second tick to keep countdown display live when commitment is held
   useEffect(() => {
-    const t = setInterval(() => setNowTick((x) => x + 1), 60000);
+    if (!commitment || commitment.status !== 'HELD') return;
+    const t = setInterval(() => setNowTick((x) => x + 1), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [commitment]);
 
+  // Poll for new messages; also trigger deadline check when commitment expires
   useEffect(() => {
-    const interval = setInterval(fetchMessages, 4000);
+    const interval = setInterval(() => {
+      fetchMessages();
+      if (commitment?.status === 'HELD') {
+        const deadlineMs = new Date(commitment.deadline).getTime() - Date.now();
+        if (deadlineMs <= 0) {
+          fetch(`/api/room/${listingId}/check-deadline`, { method: 'POST' }).catch(() => {});
+        }
+      }
+    }, 4000);
     return () => clearInterval(interval);
-  }, [fetchMessages]);
+  }, [fetchMessages, listingId, commitment]);
 
   useEffect(() => {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
+  // WebSocket connection (polling fallback is the setInterval above)
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const role = isSeller ? 'seller' : 'buyer';
@@ -170,20 +204,27 @@ export default function ImprovementRoom({
     }
   }
 
+  // Seller: upload improved file via Supabase signed URL, then notify the room
   async function handleUpdate(e: { preventDefault(): void }) {
     e.preventDefault();
     if (!updateFile && !updatePrice) return;
 
     setUpdating(true);
     try {
-      const formData = new FormData();
-      if (updateFile) formData.append('file', updateFile);
-      if (updatePreview) formData.append('preview', updatePreview);
-      if (updatePrice) formData.append('price', updatePrice);
+      let filePath: string | undefined;
+      let previewPath: string | undefined;
+      if (updateFile) filePath = await uploadToSupabase(updateFile);
+      if (updatePreview) previewPath = await uploadToSupabase(updatePreview, 'preview');
 
       const res = await fetch(`/api/room/${listingId}/update`, {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filePath,
+          previewPath,
+          price: updatePrice || undefined,
+          fileName: updateFile?.name,
+        }),
       });
 
       if (res.ok) {
@@ -283,17 +324,40 @@ export default function ImprovementRoom({
         </div>
       </div>
 
-      {/* Commitment banner */}
-      {heldCommitment && (
-        <div className="border-b-2 border-[var(--ink)] bg-[var(--accent-yellow)] px-4 py-2 text-sm font-semibold text-[var(--ink)] flex items-center justify-between gap-3 flex-wrap">
-          <span>
-            {isSeller ? 'Buyer committed' : 'You committed'} ${parseFloat(heldCommitment.amount_usdc).toFixed(2)} —{' '}
-            {sellerDelivered
-              ? 'seller delivered. Buy or Reject below.'
-              : `seller has ${formatRemaining(heldCommitment.deadline)} to deliver.`}
-          </span>
-        </div>
-      )}
+      {/* Commitment countdown banner — changes color as deadline approaches */}
+      {heldCommitment && (() => {
+        const remaining = formatRemaining(heldCommitment.deadline);
+        const isExpired = remaining === 'expired';
+        const isUrgent = !isExpired && new Date(heldCommitment.deadline).getTime() - Date.now() < 60_000;
+        const bg = isExpired
+          ? 'var(--accent-coral)'
+          : isUrgent
+          ? '#F5B82E'
+          : 'var(--accent-yellow)';
+        return (
+          <div
+            className="border-b-2 border-[var(--ink)] px-4 py-2 text-sm font-semibold text-[var(--ink)] flex items-center justify-between gap-3 flex-wrap"
+            style={{ background: bg }}
+          >
+            <span>
+              {isSeller ? 'Buyer committed' : 'You committed'} ${parseFloat(heldCommitment.amount_usdc).toFixed(2)} —{' '}
+              {sellerDelivered
+                ? 'Seller delivered. Buyer can now Buy or Reject.'
+                : isExpired
+                  ? 'Deadline expired. Refund processing…'
+                  : `Seller has ${remaining} to deliver.`}
+            </span>
+            {!sellerDelivered && !isExpired && (
+              <span
+                className="font-mono text-sm font-bold shrink-0"
+                style={{ fontFamily: 'var(--font-display)', animation: isUrgent ? 'skeleton-pulse 0.6s ease-in-out infinite' : 'none' }}
+              >
+                {remaining}
+              </span>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 bg-[var(--bg-cream)]">
@@ -337,11 +401,9 @@ export default function ImprovementRoom({
               <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
                 <div
                   className={`max-w-[85%] sm:max-w-[75%] px-4 py-3 border-2 border-[var(--ink)] ${
-                    isMe
-                      ? 'bg-[var(--accent-green)] text-[var(--ink)]'
-                      : 'bg-[var(--bg-cream-alt)] text-[var(--ink)]'
+                    isMe ? 'bg-[var(--accent-green)] text-[var(--ink)]' : 'bg-[var(--bg-cream-alt)] text-[var(--ink)]'
                   }`}
-                  style={{ boxShadow: isMe ? '3px 3px 0 0 var(--shadow-hard)' : '3px 3px 0 0 var(--shadow-hard)' }}
+                  style={{ boxShadow: '3px 3px 0 0 var(--shadow-hard)' }}
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-[11px] font-bold uppercase tracking-wide" style={{ fontFamily: 'var(--font-display)' }}>
@@ -405,14 +467,14 @@ export default function ImprovementRoom({
                 className="btn-primary text-[11px]"
                 style={{ padding: '8px 14px', fontSize: '11px' }}
               >
-                {updating ? 'Updating…' : 'Push Update'}
+                {updating ? 'Uploading…' : 'Push Update'}
               </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* Buyer post-delivery actions */}
+      {/* Buyer post-delivery actions: Buy or Reject */}
       {myHeldCommitment && sellerDelivered && !isArchived && (
         <div className="border-t-2 border-[var(--ink)] p-4 bg-[var(--accent-yellow)] flex items-center justify-between gap-3 flex-wrap">
           <span className="text-sm font-semibold text-[var(--ink)]">
@@ -438,7 +500,7 @@ export default function ImprovementRoom({
         </div>
       )}
 
-      {/* Commitment input (buyer only) */}
+      {/* Commitment input (buyer only, when no held commitment) */}
       {!isSeller && !isArchived && !myHeldCommitment && listing && (
         <div className="border-t-2 border-[var(--ink)] px-4 py-2 flex justify-end bg-[var(--bg-cream)]">
           <CommitmentRequest

@@ -7,8 +7,10 @@ import LocusCheckoutButton from '@/components/LocusCheckoutButton';
 import TxProof from '@/components/TxProof';
 import ShareLink from '@/components/ShareLink';
 import DirectCheckoutLink from '@/components/DirectCheckoutLink';
+
 import { SkeletonListingPage } from '@/components/Skeleton';
 import Sunburst from '@/components/Sunburst';
+import TipButton from '@/components/TipButton';
 import type { CheckoutSuccessData } from '@withlocus/checkout-react';
 
 interface Listing {
@@ -19,6 +21,8 @@ interface Listing {
   category: string;
   file_type: string;
   preview_url: string;
+  preview_gif_url: string | null;
+  video_duration: number | null;
   preview_version: number;
   status: string;
   created_at: string;
@@ -27,6 +31,7 @@ interface Listing {
   seller_name: string | null;
   seller_trust: number;
   seller_wallet: string;
+  seller_email: string | null;
 }
 
 interface PurchaseInfo {
@@ -52,6 +57,7 @@ export default function ListingPage() {
   const [listing, setListing] = useState<Listing | null>(null);
   const [purchase, setPurchase] = useState<PurchaseInfo | null>(null);
   const [breakdown, setBreakdown] = useState<PriceBreakdown | null>(null);
+  const [isSeller, setIsSeller] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [txHash, setTxHash] = useState<string | null>(null);
@@ -66,6 +72,7 @@ export default function ListingPage() {
           setListing(data.listing);
           if (data.purchase) setPurchase(data.purchase);
           if (data.breakdown) setBreakdown(data.breakdown);
+          if (data.isSeller) setIsSeller(true);
         }
       })
       .catch(() => setError('Failed to load listing'))
@@ -145,16 +152,26 @@ export default function ListingPage() {
 
         {/* Preview */}
         <div>
+
           <div
-            className="border-2 border-[var(--ink)] overflow-hidden relative bg-[#e8e0cc]"
+            className="border-2 border-[var(--ink)] overflow-hidden relative bg-[#e8e0cc] group/preview"
             style={{ boxShadow: '6px 6px 0 0 var(--shadow-hard)' }}
           >
             {listing.preview_url && listing.preview_url !== 'pending' ? (
-              <img
-                src={listing.preview_url}
-                alt={listing.title}
-                className="w-full aspect-square object-cover"
-              />
+              <>
+                <img
+                  src={listing.preview_url}
+                  alt={listing.title}
+                  className={`w-full aspect-square object-cover ${listing.preview_gif_url ? 'group-hover/preview:hidden' : ''}`}
+                />
+                {listing.preview_gif_url && (
+                  <img
+                    src={listing.preview_gif_url}
+                    alt={`${listing.title} preview`}
+                    className="w-full aspect-square object-cover hidden group-hover/preview:block"
+                  />
+                )}
+              </>
             ) : (
               <div className="w-full aspect-square flex items-center justify-center">
                 <span
@@ -171,7 +188,16 @@ export default function ListingPage() {
             >
               v{listing.preview_version}
             </div>
+            {listing.video_duration && (
+              <div className="absolute bottom-3 left-3 bg-black/70 text-white text-xs px-2 py-1 rounded flex items-center gap-1.5">
+                <span className="text-emerald-400">&#9654;</span>
+                {Math.floor(listing.video_duration / 60)}:{String(Math.floor(listing.video_duration % 60)).padStart(2, '0')}
+              </div>
+            )}
           </div>
+          {listing.preview_gif_url && (
+            <p className="text-xs text-zinc-600 text-center mt-2">Hover to see animated preview</p>
+          )}
         </div>
 
         {/* Details */}
@@ -274,8 +300,20 @@ export default function ListingPage() {
             </div>
           )}
 
+
+          {/* Seller badge */}
+          {isSeller && listing.status === 'ACTIVE' && (
+            <div
+              className="border-2 border-[var(--ink)] bg-[var(--bg-cream-alt)] px-4 py-4 text-center"
+              style={{ boxShadow: '3px 3px 0 0 var(--shadow-hard)' }}
+            >
+              <p className="font-bold text-[13px] text-[var(--ink)] uppercase" style={{ fontFamily: 'var(--font-display)' }}>This is your listing</p>
+              <p className="text-[11px] text-[var(--ink-soft)] mt-1">You cannot buy your own product</p>
+            </div>
+          )}
+
           {/* Buy / Checkout */}
-          {listing.status === 'ACTIVE' && !purchase && (
+          {listing.status === 'ACTIVE' && !purchase && !isSeller && (
             <LocusCheckoutButton
               listingId={listing.id}
               sessionId={listing.checkout_session_id}
@@ -346,6 +384,17 @@ export default function ListingPage() {
               <ShareLink listingId={listing.id} />
               <DirectCheckoutLink checkoutUrl={listing.checkout_url} disabled={!isAuthenticated} />
             </div>
+          )}
+
+
+          {/* Support Creator tip */}
+          {!isSeller && (
+            <TipButton
+              listingId={listing.id}
+              sellerWallet={listing.seller_wallet}
+              sellerName={listing.seller_name}
+              sellerEmail={listing.seller_email}
+            />
           )}
 
           {/* Improvement room */}

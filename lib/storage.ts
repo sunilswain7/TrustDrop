@@ -1,50 +1,83 @@
-import fs from 'fs/promises';
-import path from 'path';
+import { getSupabaseAdmin, BUCKETS } from './supabase';
 
-const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data', 'files');
-const PREVIEW_DIR = process.env.PREVIEW_DIR || path.join(process.cwd(), 'data', 'previews');
-
-async function ensureDir(dir: string) {
-  await fs.mkdir(dir, { recursive: true });
-}
-
-// Encrypted product files
 export async function saveEncryptedFile(listingId: string, blob: Buffer): Promise<string> {
-  const dir = path.join(DATA_DIR, listingId);
-  await ensureDir(dir);
-  const filePath = path.join(dir, 'encrypted.bin');
-  await fs.writeFile(filePath, blob);
-  return filePath;
+  const path = `${listingId}/encrypted.bin`;
+  const { error } = await getSupabaseAdmin().storage
+    .from(BUCKETS.files)
+    .upload(path, blob, { contentType: 'application/octet-stream', upsert: true });
+  if (error) throw new Error(`Failed to upload encrypted file: ${error.message}`);
+  return path;
 }
 
 export async function readEncryptedFile(filePath: string): Promise<Buffer> {
-  return fs.readFile(filePath);
+  const { data, error } = await getSupabaseAdmin().storage
+    .from(BUCKETS.files)
+    .download(filePath);
+  if (error || !data) throw new Error(`Failed to download encrypted file: ${error?.message}`);
+  return Buffer.from(await data.arrayBuffer());
 }
 
 export async function deleteEncryptedFile(filePath: string): Promise<void> {
-  try {
-    await fs.unlink(filePath);
-  } catch {
-    // File may not exist
-  }
+  await getSupabaseAdmin().storage.from(BUCKETS.files).remove([filePath]);
 }
 
-// Preview images
 export async function savePreview(
   listingId: string,
   version: number,
   imageBuffer: Buffer
 ): Promise<string> {
-  const dir = path.join(PREVIEW_DIR, listingId);
-  await ensureDir(dir);
-  const fileName = `v${version}.jpg`;
-  const filePath = path.join(dir, fileName);
-  await fs.writeFile(filePath, imageBuffer);
-  // Return URL path for serving
-  return `/api/previews/${listingId}/${fileName}`;
+  const path = `${listingId}/v${version}.jpg`;
+  const { error } = await getSupabaseAdmin().storage
+    .from(BUCKETS.previews)
+    .upload(path, imageBuffer, { contentType: 'image/jpeg', upsert: true });
+  if (error) throw new Error(`Failed to upload preview: ${error.message}`);
+  const { data: urlData } = getSupabaseAdmin().storage
+    .from(BUCKETS.previews)
+    .getPublicUrl(path);
+  return urlData.publicUrl;
 }
 
-export async function readPreview(listingId: string, fileName: string): Promise<Buffer> {
-  const filePath = path.join(PREVIEW_DIR, listingId, fileName);
-  return fs.readFile(filePath);
+export async function readPreview(_listingId: string, _fileName: string): Promise<Buffer> {
+  const path = `${_listingId}/${_fileName}`;
+  const { data, error } = await getSupabaseAdmin().storage
+    .from(BUCKETS.previews)
+    .download(path);
+  if (error || !data) throw new Error(`Failed to download preview: ${error?.message}`);
+  return Buffer.from(await data.arrayBuffer());
+}
+
+export async function createSignedUploadUrl(bucket: string, path: string) {
+  const { data, error } = await getSupabaseAdmin().storage
+    .from(bucket)
+    .createSignedUploadUrl(path);
+  if (error || !data) throw new Error(`Failed to create signed URL: ${error?.message}`);
+  return data;
+}
+
+export async function downloadRawUpload(path: string): Promise<Buffer> {
+  const { data, error } = await getSupabaseAdmin().storage
+    .from(BUCKETS.files)
+    .download(path);
+  if (error || !data) throw new Error(`Failed to download raw upload: ${error?.message}`);
+  return Buffer.from(await data.arrayBuffer());
+}
+
+export async function deleteRawUpload(path: string): Promise<void> {
+  await getSupabaseAdmin().storage.from(BUCKETS.files).remove([path]);
+}
+
+export async function savePreviewGif(
+  listingId: string,
+  version: number,
+  gifBuffer: Buffer
+): Promise<string> {
+  const path = `${listingId}/v${version}-preview.gif`;
+  const { error } = await getSupabaseAdmin().storage
+    .from(BUCKETS.previews)
+    .upload(path, gifBuffer, { contentType: 'image/gif', upsert: true });
+  if (error) throw new Error(`Failed to upload preview GIF: ${error.message}`);
+  const { data: urlData } = getSupabaseAdmin().storage
+    .from(BUCKETS.previews)
+    .getPublicUrl(path);
+  return urlData.publicUrl;
 }

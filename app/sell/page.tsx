@@ -14,6 +14,30 @@ const CATEGORIES = [
 ];
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif'];
+const VIDEO_EXTENSIONS = ['mp4', 'mov', 'avi', 'webm', 'mkv'];
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
+
+async function uploadToSupabase(file: File, fileType?: 'preview'): Promise<string> {
+  const res = await fetch('/api/upload/signed-url', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fileName: file.name, fileType }),
+  });
+  if (!res.ok) throw new Error('Failed to get upload URL');
+  const { signedUrl, token, path } = await res.json();
+
+  const uploadRes = await fetch(signedUrl, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': file.type || 'application/octet-stream',
+      'x-upsert': 'true',
+    },
+    body: file,
+  });
+  if (!uploadRes.ok) throw new Error('Failed to upload file');
+
+  return path;
+}
 
 export default function SellPage() {
   const router = useRouter();
@@ -27,12 +51,14 @@ export default function SellPage() {
   const [file, setFile] = useState<File | null>(null);
   const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
   const [error, setError] = useState('');
 
-  const isImage = file
-    ? IMAGE_EXTENSIONS.includes(file.name.split('.').pop()?.toLowerCase() || '')
-    : false;
-  const needsPreview = file && !isImage;
+  const fileExt = file?.name.split('.').pop()?.toLowerCase() || '';
+  const isImage = file ? IMAGE_EXTENSIONS.includes(fileExt) : false;
+  const isVideo = file ? VIDEO_EXTENSIONS.includes(fileExt) : false;
+
+  const needsPreview = file && !isImage && !isVideo;
 
   async function handleSubmit(e: { preventDefault(): void }) {
     e.preventDefault();
@@ -41,20 +67,39 @@ export default function SellPage() {
       setError('Non-image files require a preview screenshot');
       return;
     }
+    if (file.size > MAX_FILE_SIZE) {
+      setError('File too large (max 50MB)');
+      return;
+    }
 
     setSubmitting(true);
     setError('');
 
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('title', title);
-    formData.append('description', description);
-    formData.append('category', category);
-    if (price) formData.append('price', price);
-    if (previewFile) formData.append('preview', previewFile);
-
     try {
-      const res = await fetch('/api/listings', { method: 'POST', body: formData });
+      setUploadProgress('Uploading file...');
+      const filePath = await uploadToSupabase(file);
+
+      let previewPath: string | undefined;
+      if (previewFile) {
+        setUploadProgress('Uploading preview...');
+        previewPath = await uploadToSupabase(previewFile, 'preview');
+      }
+
+      setUploadProgress(isVideo ? 'Encrypting & generating video preview...' : 'Encrypting & creating listing...');
+      const res = await fetch('/api/listings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          description,
+          category,
+          price: price || undefined,
+          filePath,
+          previewPath,
+          fileName: file.name,
+          fileSize: file.size,
+        }),
+      });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Failed to create listing'); return; }
       router.push(`/listing/${data.id}`);
@@ -62,6 +107,7 @@ export default function SellPage() {
       setError('Network error. Please try again.');
     } finally {
       setSubmitting(false);
+      setUploadProgress('');
     }
   }
 
@@ -237,7 +283,7 @@ export default function SellPage() {
               disabled={submitting || !file || !title}
               className="btn-primary w-full py-3 text-[14px]"
             >
-              {submitting ? 'Encrypting…' : 'List for Sale →'}
+              {submitting ? (uploadProgress || 'Processing…') : 'List for Sale →'}
             </button>
 
             <p className="text-[11px] text-[var(--ink-soft)] text-center font-medium">
